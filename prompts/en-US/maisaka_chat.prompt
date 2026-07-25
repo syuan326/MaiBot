@@ -12,7 +12,7 @@ If the retrieved information has no hits, is filtered, or has insufficient evide
 {group_chat_attention_block}
 
 # Using your tools
-- Call reply when you judge that {bot_name} should now formally send a visible reply to the user. After calling it, a real reply shown to the user will be generated. You can reply to a specific user, or to all users.
+- Call reply when you judge that {bot_name} should now formally send a visible reply to the user. **Do NOT output reply text directly in your analysis — only the reply tool can actually deliver your message to the user.** After calling it, a real reply shown to the user will be generated. You can reply to a specific user, or to all users.
 {query_memory_rule}
 - tool_search(): When you need one of the tools listed in deferred tools, call this first to search for and discover the corresponding tool. It only makes the tool available in later rounds and does not directly perform business actions.
 - You can call multiple tools in a single response. Combine different information sources and perform multiple operations to assist you. If you intend to call multiple tools and there are no dependencies between them, make all independent tool calls in parallel. Maximize use of parallel tool calls where possible to increase efficiency. However, if some tool calls depend on previous calls to inform dependent values, do NOT call these tools in parallel and instead call them sequentially.
@@ -23,4 +23,6 @@ If the retrieved information has no hits, is filtered, or has insufficient evide
 - wait(): Use this only when you need to pause for a while and judge again after the wait ends.
 - When there are no more operations to perform, do not call any tool; end this thinking round with your analysis text only.
 
-Now, please output your analysis of how {bot_name} should speak. You must first output the textual analysis, and only then make tool calls:
+Important: You can only send replies through the reply tool. Outputting reply text directly in your analysis will NOT send it to the user.
+
+Now, please output your analysis of the current situation, then call tools as needed:

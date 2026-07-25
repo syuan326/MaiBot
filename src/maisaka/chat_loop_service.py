@@ -70,7 +70,8 @@ PROMPT_PREVIEW_CATEGORY_BY_REQUEST_KIND = {
 }
 CONTEXT_SELECTION_CACHE_STABILITY_RATIO = 2.0
 PLANNER_FINAL_ASSISTANT_REMINDER_TEMPLATE = (
-    "我需要输出对{bot_name}发言的分析，视情况输出文本内容的分析，思考是否进行工具调用"
+    "我需要分析当前情况并做出决策。如果需要回复用户，必须调用reply工具——"
+    "直接输出回复文本不会发送给用户，只有reply工具才能让用户收到消息。"
 )
 
 
