@@ -19,6 +19,7 @@ def build_planner_prefix(
     *,
     timestamp: datetime,
     user_name: str,
+    user_id: str = "",
     group_card: str = "",
     message_id: Optional[str] = None,
     chat_id: Optional[str] = None,
@@ -32,6 +33,7 @@ def build_planner_prefix(
     Args:
         timestamp: 消息时间。
         user_name: 展示给规划器的用户名。
+        user_id: 平台用户唯一标识。
         group_card: 群昵称。
         message_id: 消息 ID。
         chat_id: 聊天流 ID。
@@ -47,6 +49,10 @@ def build_planner_prefix(
     message_attrs: list[str] = []
     if include_message_id:
         message_attrs.append(f'msg_id="{escape(message_id or "", quote=True)}"')
+
+    normalized_user_id = user_id.strip()
+    if normalized_user_id:
+        message_attrs.append(f'user_id="{escape(normalized_user_id, quote=True)}"')
 
     if include_chat_id:
         normalized_chat_id = str(chat_id or "").strip()
@@ -130,6 +136,7 @@ def build_planner_user_prefix_from_session_message(
     return build_planner_prefix(
         timestamp=message.timestamp,
         user_name=user_name,
+        user_id=user_info.user_id,
         group_card=user_info.user_cardname or "",
         message_id=message.message_id,
         chat_id=message.session_id,
@@ -146,6 +153,7 @@ def build_session_backed_text_message(
     text: str,
     timestamp: datetime,
     source_kind: str,
+    user_id: str = "",
     group_card: str = "",
     message_id: Optional[str] = None,
     chat_id: Optional[str] = None,
@@ -161,6 +169,7 @@ def build_session_backed_text_message(
         text: 发言内容。
         timestamp: 发言时间。
         source_kind: 上下文来源类型。
+        user_id: 平台用户唯一标识。
         group_card: 群昵称。
         message_id: 消息 ID。
         chat_id: 聊天流 ID。
@@ -176,6 +185,7 @@ def build_session_backed_text_message(
     planner_prefix = build_planner_prefix(
         timestamp=timestamp,
         user_name=speaker_name,
+        user_id=user_id,
         group_card=group_card,
         message_id=message_id,
         chat_id=chat_id,

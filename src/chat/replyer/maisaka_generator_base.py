@@ -161,6 +161,7 @@ class BaseMaisakaReplyGenerator:
 
         user_info = reply_message.message_info.user_info
         sender_name = user_info.user_cardname or user_info.user_nickname or user_info.user_id
+        sender_name_with_id = f"{sender_name}（ID: {user_info.user_id}）" if user_info.user_id else sender_name
         bot_name = global_config.bot.nickname.strip() or sender_name
         target_message_id = reply_message.message_id.strip() if reply_message.message_id else "未知"
         # target_time = reply_message.timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -178,25 +179,8 @@ class BaseMaisakaReplyGenerator:
                 ]
             )
 
-        # target_lines = [
-        #     "【本次回复目标】",
-        #     f"- msg_id：{target_message_id}",
-        # ]
-        # if quote_ids:
-        #     target_lines.append(f"- quote={','.join(quote_ids)}")
-        # target_lines.extend(
-        #     [
-        #         f"- 时间：{target_time}",
-        #         f"- 用户名：{sender_name}",
-        #         f"- 发言内容：{target_content}",
-        #         "",
-        #         "你这次要回复的就是这条目标消息，请结合整段上下文理解，但不要把其他历史消息当成当前回复对象。",
-        #     ]
-        # )
-        # return "\n".join(target_lines)
-
         target_lines = [
-            f"你想要回复的消息是 {sender_name} 发送的 msg_id为 {target_message_id} 的消息，你这次要回复的就是这条目标消息，不要把其他历史消息当成当前回复对象。",
+            f"你想要回复的消息是 {sender_name_with_id} 发送的 msg_id为 {target_message_id} 的消息，你这次要回复的就是这条目标消息，不要把其他历史消息当成当前回复对象。",
         ]
         if quote_ids:
             target_lines.append(f"- quote={','.join(quote_ids)}")
@@ -323,7 +307,8 @@ class BaseMaisakaReplyGenerator:
 
         user_info = target_message.message_info.user_info
         sender_name = user_info.user_cardname or user_info.user_nickname or user_info.user_id
-        return f"{sender_name} 的消息 msg_id={message_id} 中的第 {image_index + 1} 张图片"
+        sender_name_with_id = f"{sender_name}（ID: {user_info.user_id}）" if user_info.user_id else sender_name
+        return f"{sender_name_with_id} 的消息 msg_id={message_id} 中的第 {image_index + 1} 张图片"
 
     def _format_attachment_at_target(
         self,
@@ -342,7 +327,8 @@ class BaseMaisakaReplyGenerator:
         if target_message is not None:
             user_info = target_message.message_info.user_info
             target_name = user_info.user_cardname or user_info.user_nickname or user_info.user_id
-            return f"@{target_name}".strip()
+            target_name_with_id = f"@{target_name}（ID: {user_info.user_id}）" if user_info.user_id else f"@{target_name}"
+            return target_name_with_id.strip()
         if user_id:
             return f"@{user_id}"
         return f"msg_id={message_id} 的发送者"

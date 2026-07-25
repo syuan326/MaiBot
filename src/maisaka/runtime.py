@@ -513,6 +513,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             planner_prefix = build_planner_prefix(
                 timestamp=message.timestamp,
                 user_name=speaker_name,
+                user_id=user_info.user_id,
                 group_card=user_info.user_cardname or "",
                 message_id=message.message_id,
                 chat_id=message.session_id,
