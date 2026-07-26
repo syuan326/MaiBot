@@ -273,6 +273,24 @@ export interface ReplierResponseEvent {
   timestamp: number
 }
 
+export interface AuthRejectedIssue {
+  issue_type: string
+  detail: string
+}
+
+export interface AuthRejectedEvent {
+  session_id: string
+  cycle_id: number | null
+  stage: 'planner' | 'replyer' | string
+  attempt: number
+  max_retries: number
+  final: boolean
+  reason: string
+  issues: AuthRejectedIssue[]
+  rejected_text: string
+  timestamp: number
+}
+
 // ─── 统一事件联合类型 ─────────────────────────────────────────
 
 export type MaisakaMonitorEvent =
@@ -292,6 +310,7 @@ export type MaisakaMonitorEvent =
   | { type: 'tool.execution'; data: ToolExecutionEvent }
   | { type: 'replier.request'; data: ReplierRequestEvent }
   | { type: 'replier.response'; data: ReplierResponseEvent }
+  | { type: 'auth.rejected'; data: AuthRejectedEvent }
 
 export type MaisakaEventListener = (event: MaisakaMonitorEvent) => void
 

@@ -21,6 +21,7 @@ import {
   FileCode2,
   ImageIcon,
   PauseCircle,
+  ShieldAlert,
   Timer,
   Wrench,
   XCircle,
@@ -44,6 +45,7 @@ import { useResolvedAvatarUrl, type AvatarTargetType } from '@/lib/avatar-url'
 import { cn } from '@/lib/utils'
 
 import type {
+  AuthRejectedEvent,
   MaisakaMessageMedia,
   MaisakaToolCall,
   MessageIngestedEvent,
@@ -576,11 +578,65 @@ function TimingGateCard({ data }: { data: TimingGateResultEvent }) {
   )
 }
 
+const AUTH_ISSUE_TYPE_LABELS: Record<string, string> = {
+  wrong_attribution: '归属错误',
+  wrong_target: '对象错误',
+  wrong_name: '称呼混淆',
+  self_confusion: '自我混淆',
+}
+
+function AuthRejectCard({ data }: { data: AuthRejectedEvent }) {
+  const stageLabel = data.stage === 'replyer' ? 'Replyer' : 'Planner'
+
+  return (
+    <div className={cn(
+      'flex items-start gap-3 rounded-md border px-3 py-2 shadow-sm',
+      data.final ? 'border-red-500/40 bg-red-500/5' : 'border-amber-500/40 bg-amber-500/5',
+    )}>
+      <div className={cn(
+        'mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+        data.final ? 'bg-red-500/15 text-red-500' : 'bg-amber-500/15 text-amber-500',
+      )}>
+        <ShieldAlert className="h-3.5 w-3.5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span className="text-sm font-medium">鉴权驳回</span>
+          <Badge variant="outline" className="text-[10px]">{stageLabel}</Badge>
+          <Badge variant={data.final ? 'destructive' : 'secondary'} className="text-[10px]">
+            {data.final ? `第 ${data.attempt} 次 · 已放弃本轮` : `第 ${data.attempt}/${data.max_retries} 次 · 将重试`}
+          </Badge>
+          <span className="ml-auto text-xs text-muted-foreground">{formatTimestamp(data.timestamp)}</span>
+        </div>
+        {data.reason && (
+          <p className="text-sm text-foreground/90">{data.reason}</p>
+        )}
+        {data.issues && data.issues.length > 0 && (
+          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+            {data.issues.map((issue, idx) => (
+              <li key={`${issue.issue_type}-${idx}`}>
+                {AUTH_ISSUE_TYPE_LABELS[issue.issue_type] ?? issue.issue_type}：{issue.detail}
+              </li>
+            ))}
+          </ul>
+        )}
+        {data.rejected_text && (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              被驳回的内容
+            </summary>
+            <CollapsibleText text={data.rejected_text} maxLines={4} className="mt-1 text-muted-foreground" />
+          </details>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ToolCallBadges({ toolCalls }: { toolCalls: MaisakaToolCall[] }) {
   if (toolCalls.length <= 0) {
     return null
   }
-
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
       {toolCalls.map((tc: MaisakaToolCall, idx: number) => (
@@ -1152,6 +1208,8 @@ function TimelineEventRenderer({
       return <ToolExecutionCard data={entry.data as ToolExecutionEvent} />
     case 'replier.response':
       return <ReplierResponseCard data={entry.data as ReplierResponseEvent} />
+    case 'auth.rejected':
+      return <AuthRejectCard data={entry.data as AuthRejectedEvent} />
     // planner.request, replier.request 和 session.start 通常不需要在 timeline 中主要展示
     default:
       return null
@@ -1235,6 +1293,7 @@ export function MaisakaMonitor() {
         || entry.type === 'message.sent'
         || entry.type === 'tool.execution'
         || entry.type === 'replier.response'
+        || entry.type === 'auth.rejected'
       ) {
         visibleEntries.push(entry)
       }

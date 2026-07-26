@@ -47,6 +47,7 @@ from src.maisaka.context.messages import (
 from src.maisaka.context.planner_messages import extract_quote_ids_from_message_sequence
 from src.maisaka.display.prompt_cli_renderer import PromptCLIVisualizer
 from src.maisaka.memory.mid_term import is_mid_term_memory_message
+from src.maisaka.monitor.events import emit_auth_rejected
 from src.maisaka.visual.message_limiter import limit_latest_images_in_messages
 from src.plugin_runtime.hook_payloads import deserialize_prompt_messages, serialize_prompt_messages
 
@@ -1227,7 +1228,21 @@ class BaseMaisakaReplyGenerator:
                 auth_retry_count += 1
                 max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
                 reject_reason = build_replyer_auth_reject_reason(auth_decision)
-                if auth_retry_count <= max_auth_retries:
+                auth_is_final = auth_retry_count > max_auth_retries
+                await emit_auth_rejected(
+                    session_id=preview_chat_id,
+                    stage="replyer",
+                    attempt=auth_retry_count,
+                    max_retries=max_auth_retries,
+                    final=auth_is_final,
+                    reason=auth_decision.reason,
+                    issues=[
+                        {"issue_type": issue.issue_type, "detail": issue.detail}
+                        for issue in auth_decision.issues
+                    ],
+                    rejected_text=" ".join(response_text.split())[:300],
+                )
+                if not auth_is_final:
                     retry_events.append(
                         {
                             "attempt": retry_count + 1,

@@ -73,6 +73,7 @@ from src.maisaka.memory.mid_term import (
     is_mid_term_memory_reference_message,
 )
 from src.maisaka.monitor.events import (
+    emit_auth_rejected,
     emit_planner_finalized,
 )
 from src.maisaka.memory.person_profile import build_person_profile_injection_messages
@@ -1071,7 +1072,24 @@ class MaisakaReasoningEngine:
                                     planner_auth_reject_count += 1
                                     self._inject_planner_auth_feedback(state.response, auth_decision)
                                     max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
-                                    if planner_auth_reject_count <= max_auth_retries:
+                                    auth_is_final = planner_auth_reject_count > max_auth_retries
+                                    await emit_auth_rejected(
+                                        session_id=self._runtime.session_id,
+                                        cycle_id=cycle_detail.cycle_id,
+                                        stage="planner",
+                                        attempt=planner_auth_reject_count,
+                                        max_retries=max_auth_retries,
+                                        final=auth_is_final,
+                                        reason=auth_decision.reason,
+                                        issues=[
+                                            {"issue_type": issue.issue_type, "detail": issue.detail}
+                                            for issue in auth_decision.issues
+                                        ],
+                                        rejected_text=" ".join(
+                                            self._get_effective_planner_thought(state.response).split()
+                                        )[:300],
+                                    )
+                                    if not auth_is_final:
                                         logger.warning(
                                             f"{self._runtime.log_prefix} Planner 输出被鉴权驳回，重新规划: "
                                             f"次数={planner_auth_reject_count}/{max_auth_retries} "
@@ -1079,7 +1097,8 @@ class MaisakaReasoningEngine:
                                         )
                                         state.cycle_end = CycleEnd(
                                             "auth_retry",
-                                            f"Planner 输出未通过身份核对，驳回后重新规划（第 {planner_auth_reject_count} 次）。",
+                                            f"Planner 输出未通过身份核对（{auth_decision.reason}），"
+                                            f"驳回后重新规划（第 {planner_auth_reject_count} 次）。",
                                         )
                                         continue
                                     logger.warning(
@@ -1088,7 +1107,7 @@ class MaisakaReasoningEngine:
                                     )
                                     state.cycle_end = CycleEnd(
                                         "auth_rejected",
-                                        "Planner 输出连续未通过身份核对，已放弃本轮。",
+                                        f"Planner 输出连续未通过身份核对（{auth_decision.reason}），已放弃本轮。",
                                     )
                                     self._runtime._enter_stop_state()
                                     break

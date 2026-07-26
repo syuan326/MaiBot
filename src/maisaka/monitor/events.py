@@ -552,3 +552,43 @@ async def emit_planner_finalized(
             "end_detail": end_detail,
         },
     })
+
+
+async def emit_auth_rejected(
+    *,
+    session_id: str,
+    stage: str,
+    attempt: int,
+    max_retries: int,
+    final: bool,
+    reason: str,
+    issues: Optional[List[Dict[str, Any]]] = None,
+    rejected_text: str = "",
+    cycle_id: Optional[int] = None,
+) -> None:
+    """广播鉴权器驳回事件。
+
+    Args:
+        session_id: 当前聊天流 ID。
+        stage: 驳回发生的阶段，planner 或 replyer。
+        attempt: 当前是第几次驳回（从 1 开始）。
+        max_retries: 配置的最大重试次数。
+        final: 是否已重试耗尽并放弃本轮。
+        reason: 驳回理由。
+        issues: 审核发现的身份问题列表。
+        rejected_text: 被驳回内容的截断预览。
+        cycle_id: 关联的思考循环编号；replyer 阶段无法获取时为空。
+    """
+
+    await _broadcast("auth.rejected", {
+        "session_id": session_id,
+        "cycle_id": cycle_id,
+        "stage": stage,
+        "attempt": attempt,
+        "max_retries": max_retries,
+        "final": final,
+        "reason": reason,
+        "issues": _normalize_payload_value(list(issues or [])),
+        "rejected_text": rejected_text,
+        "timestamp": time.time(),
+    })
