@@ -376,23 +376,25 @@ class PersonProfileService:
                     primary_name = name
         return aliases, primary_name
 
-    def get_person_aliases(self, person_id: str) -> Tuple[List[str], str, List[str]]:
-        """获取人物别名集合、主展示名、记忆特征。"""
+    def get_person_aliases(self, person_id: str) -> Tuple[List[str], str, List[str], str]:
+        """获取人物别名集合、主展示名、记忆特征、用户ID。"""
         aliases: List[str] = []
         primary_name = ""
         memory_traits: List[str] = []
+        user_id = ""
         if not person_id:
-            return aliases, primary_name, memory_traits
+            return aliases, primary_name, memory_traits, user_id
         recovered_aliases, recovered_primary_name = self._recover_aliases_from_memory(person_id)
         try:
             with get_db_session(auto_commit=False) as session:
                 record = session.exec(select(PersonInfo).where(PersonInfo.person_id == person_id).limit(1)).first()
                 if not record:
-                    return recovered_aliases, recovered_primary_name or person_id, memory_traits
+                    return recovered_aliases, recovered_primary_name or person_id, memory_traits, user_id
             person_name = str(getattr(record, "person_name", "") or "").strip()
             nickname = str(getattr(record, "user_nickname", "") or "").strip()
             group_nicks = self._parse_group_nicks(getattr(record, "group_cardname", None))
             memory_traits = self._parse_memory_traits(getattr(record, "memory_points", None))
+            user_id = str(getattr(record, "user_id", "") or "").strip()
 
             primary_name = (
                 person_name
@@ -412,7 +414,7 @@ class PersonProfileService:
                 aliases.append(norm)
         except Exception as e:
             logger.warning(f"解析人物别名失败: person_id={person_id}, err={e}")
-        return aliases, primary_name, memory_traits
+        return aliases, primary_name, memory_traits, user_id
 
     def _collect_relation_evidence(
         self,
@@ -750,6 +752,7 @@ class PersonProfileService:
     def _build_profile_text(
         self,
         person_id: str,
+        user_id: str,
         primary_name: str,
         aliases: List[str],
         relation_edges: List[Dict[str, Any]],
@@ -765,6 +768,7 @@ class PersonProfileService:
         )
         return build_structured_profile_text(
             person_id=person_id,
+            user_id=user_id,
             primary_name=primary_name,
             aliases=aliases[:8],
             identity_settings=buckets.get("identity_settings", []),
@@ -1115,7 +1119,7 @@ class PersonProfileService:
 
         latest = self.metadata_store.get_latest_person_profile_snapshot(pid)
         if not force_refresh and not self._is_snapshot_stale(latest, ttl_seconds):
-            aliases, primary_name, _ = self.get_person_aliases(pid)
+            aliases, primary_name, _, _user_id = self.get_person_aliases(pid)
             payload = {
                 "success": True,
                 "person_id": pid,
@@ -1129,7 +1133,7 @@ class PersonProfileService:
                 **self._apply_manual_override(pid, payload),
             }
 
-        aliases, primary_name, memory_traits = self.get_person_aliases(pid)
+        aliases, primary_name, memory_traits, user_id = self.get_person_aliases(pid)
         if not aliases and person_keyword:
             aliases = [person_keyword.strip()]
             primary_name = person_keyword.strip()
@@ -1197,6 +1201,7 @@ class PersonProfileService:
 
         profile_text = self._build_profile_text(
             person_id=pid,
+            user_id=user_id,
             primary_name=primary_name,
             aliases=aliases,
             relation_edges=relation_edges,

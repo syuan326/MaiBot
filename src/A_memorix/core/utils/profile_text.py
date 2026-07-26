@@ -70,6 +70,7 @@ def section_is_empty(lines: Iterable[str]) -> bool:
 def build_structured_profile_text(
     *,
     person_id: str,
+    user_id: str = "",
     primary_name: str = "",
     aliases: Iterable[object] = (),
     identity_settings: Iterable[object] = (),
@@ -94,7 +95,8 @@ def build_structured_profile_text(
 
     lines = [
         PROFILE_REQUIRED_PREFIX,
-        f"人物ID: {str(person_id or '').strip()}",
+        f"人物画像ID: {str(person_id or '').strip()}",
+        f"User ID: {str(user_id or '').strip()}",
         f"主称呼: {str(primary_name or '').strip()}",
         f"别名: {alias_text}",
     ]
