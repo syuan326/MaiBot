@@ -960,6 +960,88 @@ class ChatConfig(ConfigBase):
     """如何回复、引用回复与聊天 Prompt 配置。"""
 
 
+class AuthConfig(ConfigBase):
+    """鉴权配置类"""
+
+    __ui_label__ = "鉴权"
+    __ui_order__ = 30
+
+    enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "启用鉴权器",
+                "en_US": "Enable authenticator",
+                "ja_JP": "認証器を有効化",
+            },
+            "x-widget": "switch",
+            "x-icon": "shield-check",
+        },
+    )
+    """开启后，鉴权器会对 Planner 决策和 Replyer 回复做身份核对，防止麦麦认错用户；每次检查会额外调用一次模型。"""
+
+    check_planner: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "检查 Planner 输出",
+                "en_US": "Check planner output",
+                "ja_JP": "Planner 出力をチェック",
+            },
+            "x-widget": "switch",
+            "x-icon": "map",
+        },
+    )
+    """检查 Planner 的思考和工具调用是否存在用户身份混淆；不通过时驳回并让其重新规划。"""
+
+    check_replyer: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "检查 Replyer 输出",
+                "en_US": "Check replyer output",
+                "ja_JP": "Replyer 出力をチェック",
+            },
+            "x-widget": "switch",
+            "x-icon": "message-square",
+        },
+    )
+    """检查待发送的回复是否存在用户身份混淆；不通过时让 Replyer 重新生成。"""
+
+    max_auth_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "鉴权重试次数",
+                "en_US": "Auth retry count",
+                "ja_JP": "認証リトライ回数",
+            },
+            "x-widget": "input",
+            "x-icon": "rotate-cw",
+        },
+    )
+    """输出被鉴权驳回后最多重新规划/重新生成几次；重试耗尽后放弃本轮，不发送任何内容。"""
+
+    history_message_limit: int = Field(
+        default=20,
+        ge=5,
+        le=100,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "鉴权参考消息数",
+                "en_US": "Auth history message limit",
+                "ja_JP": "認証参照メッセージ数",
+            },
+            "x-widget": "input",
+            "x-icon": "layers",
+            "advanced": True,
+        },
+    )
+    """鉴权审核时提供给审核模型的最近聊天消息条数。"""
+
+
 class AttentionDriftConfig(ConfigBase):
     """注意力漂移实验功能配置。"""
 

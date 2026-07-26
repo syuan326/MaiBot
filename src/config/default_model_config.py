@@ -59,6 +59,7 @@ DEFAULT_TASK_CONFIG_TEMPLATES: dict[str, dict[str, Any]] = {
         "hard_timeout": 180.0,
     },
     "learner": {"model_list": [], "max_tokens": 4096, "hard_timeout": 120.0},
+    "auth": {"model_list": [], "max_tokens": 2048, "temperature": 0.1, "hard_timeout": 60.0},
     "expression_use": {"model_list": [], "max_tokens": 1024, "temperature": 0.3, "hard_timeout": 120.0},
     "emoji": {"model_list": [], "max_tokens": 4096, "hard_timeout": 120.0},
     "vlm": {"model_list": [], "max_tokens": 4096, "hard_timeout": 240.0},

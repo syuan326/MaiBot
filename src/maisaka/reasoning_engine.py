@@ -33,6 +33,9 @@ from src.maisaka.builtin_tool import (
     get_builtin_tool_visibility,
     is_builtin_tool_in_action_stage,
 )
+from src.maisaka.auth import authenticator
+from src.maisaka.auth.decision import AuthDecision
+from src.maisaka.auth.feedback import build_planner_auth_feedback_message, build_rejected_assistant_message
 from .chat_loop_service import ChatResponse, MaisakaChatLoopService
 from src.maisaka.display.prompt_cli_renderer import PromptCLIVisualizer
 from src.maisaka.visual.chat_history_refresher import (
@@ -618,6 +621,33 @@ class MaisakaReasoningEngine:
         self._runtime._enter_stop_state()
         planner_extra_lines.append(status_line)
 
+    async def _check_planner_auth(self, response: ChatResponse) -> Optional[AuthDecision]:
+        """对 Planner 输出执行鉴权身份核对；未启用或无内容可检时返回 None。"""
+
+        if not global_config.auth.enabled or not global_config.auth.check_planner:
+            return None
+        thought_text = self._get_effective_planner_thought(response)
+        if not thought_text.strip() and not response.tool_calls:
+            return None
+        return await authenticator.check_planner_output(
+            thought_text=thought_text,
+            tool_calls=response.tool_calls,
+            chat_history=self._runtime._chat_history,
+            session_id=self._runtime.session_id,
+        )
+
+    def _inject_planner_auth_feedback(self, response: ChatResponse, decision: AuthDecision) -> None:
+        """把被驳回的 Planner 输出与鉴权反馈写入历史，供下一轮重新规划参考。"""
+
+        self._runtime._chat_history.append(build_rejected_assistant_message(response.raw_message))
+        self._runtime._chat_history.append(
+            build_planner_auth_feedback_message(
+                thought_text=self._get_effective_planner_thought(response),
+                tool_calls=response.tool_calls,
+                decision=decision,
+            )
+        )
+
     async def _handle_planner_response_actions(
         self,
         *,
@@ -1003,6 +1033,7 @@ class MaisakaReasoningEngine:
                     if force_continue_reason := self._runtime._consume_forced_turn_reason():
                         logger.info(f"{self._runtime.log_prefix} {force_continue_reason}")
                     planner_no_tool_count = 0
+                    planner_auth_reject_count = 0
                     mid_term_reference_refreshed = False
                     round_index = 0
                     while round_index < self._runtime._max_internal_rounds:
@@ -1033,6 +1064,34 @@ class MaisakaReasoningEngine:
                             #     f"回合={round_index + 1} "
                             #     f"耗时={cycle_detail.time_records['planner']:.3f} 秒"
                             # )
+                            # 鉴权：在提交历史与执行工具之前检查 Planner 输出是否存在身份混淆
+                            if state.response is not None:
+                                auth_decision = await self._check_planner_auth(state.response)
+                                if auth_decision is not None and not auth_decision.passed:
+                                    planner_auth_reject_count += 1
+                                    self._inject_planner_auth_feedback(state.response, auth_decision)
+                                    max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
+                                    if planner_auth_reject_count <= max_auth_retries:
+                                        logger.warning(
+                                            f"{self._runtime.log_prefix} Planner 输出被鉴权驳回，重新规划: "
+                                            f"次数={planner_auth_reject_count}/{max_auth_retries} "
+                                            f"原因={auth_decision.reason!r}"
+                                        )
+                                        state.cycle_end = CycleEnd(
+                                            "auth_retry",
+                                            f"Planner 输出未通过身份核对，驳回后重新规划（第 {planner_auth_reject_count} 次）。",
+                                        )
+                                        continue
+                                    logger.warning(
+                                        f"{self._runtime.log_prefix} Planner 输出连续被鉴权驳回，放弃本轮: "
+                                        f"次数={planner_auth_reject_count} 原因={auth_decision.reason!r}"
+                                    )
+                                    state.cycle_end = CycleEnd(
+                                        "auth_rejected",
+                                        "Planner 输出连续未通过身份核对，已放弃本轮。",
+                                    )
+                                    self._runtime._enter_stop_state()
+                                    break
                             planner_no_tool_count, should_break_after_action = await self._handle_planner_response_actions(
                                 response=state.response,
                                 cycle_detail=cycle_detail,

@@ -366,6 +366,7 @@ def _build_message_from_sequence(
 class ReferenceMessageType(str, Enum):
     """参考消息类型。"""
 
+    AUTH_FEEDBACK = "auth_feedback"
     BEHAVIOR_PATTERN = "behavior_pattern"
     CONTEXT_RESTORE = "context_restore"
     CUSTOM = "custom"

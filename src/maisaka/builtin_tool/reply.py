@@ -330,6 +330,14 @@ async def handle_tool(
             f"{tool_ctx.runtime.log_prefix} 回复生成器返回空文本: "
             f"目标消息编号={target_message_id} 错误信息={reply_result.error_message!r}"
         )
+        if reply_result.auth_rejected:
+            # 鉴权驳回：回复连续未通过身份核对，暂停本轮思考循环，不再重试
+            reply_metadata["pause_execution"] = True
+            return tool_ctx.build_failure_result(
+                invocation.tool_name,
+                reply_result.error_message or "回复未通过身份核对，已放弃发送。",
+                metadata=reply_metadata,
+            )
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             "生成可见回复失败。",

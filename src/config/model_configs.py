@@ -492,6 +492,16 @@ class ModelTaskConfig(ConfigBase):
     )
     """学习模型配置，用于表达方式学习和黑话学习；留空时用 utils 模型"""
 
+    auth: TaskConfig = Field(
+        default_factory=TaskConfig,
+        json_schema_extra={
+            "x-widget": "custom",
+            "x-icon": "shield-check",
+            "advanced": True,
+        },
+    )
+    """鉴权审核模型配置，用于 Planner/Replyer 输出的身份核对；留空时用 utils 模型"""
+
     expression_use: TaskConfig = Field(
         default_factory=TaskConfig,
         json_schema_extra={

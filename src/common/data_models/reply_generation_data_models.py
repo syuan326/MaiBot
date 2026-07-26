@@ -122,6 +122,10 @@ class ReplyGenerationResult(BaseDataModel):
         default_factory=str,
         metadata={"description": "失败时的错误描述；成功时通常为空字符串。"},
     )
+    auth_rejected: bool = field(
+        default=False,
+        metadata={"description": "本次生成是否因鉴权驳回而放弃发送。"},
+    )
     monitor_detail: Optional[Dict[str, Any]] = field(
         default=None,
         metadata={"description": "供监控层直接消费的通用 tool 展示详情。"},
