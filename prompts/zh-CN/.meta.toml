@@ -1,3 +1,13 @@
+[auth_planner_check]
+display_name = "规划器鉴权"
+advanced = true
+description = "鉴权器审核模板，负责核对规划器输出是否存在用户身份混淆（归属、对象、称呼、自我），不通过时驳回重新规划。"
+
+[auth_replyer_check]
+display_name = "回复器鉴权"
+advanced = true
+description = "鉴权器审核模板，负责核对即将发送的回复是否存在用户身份混淆，不通过时驳回重新生成。"
+
 [behavior_scene_analyze]
 display_name = "行为场景分析"
 advanced = true

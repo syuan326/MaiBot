@@ -1,3 +1,13 @@
+[auth_planner_check]
+display_name = "プランナー認証器"
+advanced = true
+description = "プランナー出力にユーザー身元の混同（帰属・対象・呼称・自己）がないかを確認し、問題があれば却下して再計画させる認証テンプレート。"
+
+[auth_replyer_check]
+display_name = "リプライヤー認証器"
+advanced = true
+description = "送信予定の返信にユーザー身元の混同がないかを確認し、問題があれば却下して再生成させる認証テンプレート。"
+
 [behavior_scene_analyze]
 display_name = "行動シーン分析"
 advanced = true

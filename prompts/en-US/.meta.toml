@@ -1,3 +1,13 @@
+[auth_planner_check]
+display_name = "Planner Authenticator"
+advanced = true
+description = "Authenticator audit template that checks planner output for user identity confusion (attribution, target, naming, self) and rejects it for re-planning."
+
+[auth_replyer_check]
+display_name = "Replyer Authenticator"
+advanced = true
+description = "Authenticator audit template that checks the outgoing reply for user identity confusion and rejects it for regeneration."
+
 [behavior_scene_analyze]
 display_name = "Behavior Scene Analysis"
 advanced = true

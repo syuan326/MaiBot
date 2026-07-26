@@ -757,6 +757,10 @@ function PlannerFinalizedCard({
   const planner = data.planner
   const promptHtmlUri = planner?.prompt_html_uri?.trim() ?? ''
   const canOpenReasoning = Boolean(promptHtmlUri && parsePromptHtmlReasoningTarget(promptHtmlUri))
+  // Planner 未调用任何工具而结束的轮次：分析文本中提到的行动（如"调用reply"）不会实际执行，需要醒目标注
+  const endedWithoutToolCall =
+    data.final_state?.end_reason === 'planner_no_tool_end'
+    && (planner?.tool_calls.length ?? 0) === 0
 
   return (
     <Card className="border-l-4 border-l-emerald-500/60">
@@ -764,6 +768,11 @@ function PlannerFinalizedCard({
         <div className="flex items-center gap-2 flex-wrap">
           <Brain className="h-4 w-4 text-emerald-500" />
           <CardTitle className="text-sm font-medium">Planner</CardTitle>
+          {endedWithoutToolCall && (
+            <Badge variant="outline" className="border-amber-500/50 text-[10px] text-amber-500">
+              未调用工具
+            </Badge>
+          )}
           {canOpenReasoning && (
             <Button
               variant="ghost"
@@ -795,6 +804,15 @@ function PlannerFinalizedCard({
           <CollapsibleText text={planner.content} maxLines={6} className="text-foreground/90" />
         ) : (
           <p className="text-sm text-muted-foreground">planner 本轮没有文本内容</p>
+        )}
+
+        {endedWithoutToolCall && (
+          <div className="flex items-start gap-1.5 rounded-md border border-amber-500/35 bg-amber-500/5 px-2.5 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              本轮未调用任何工具，已结束思考。上方分析文本仅为决策过程，其中提到的行动（如“调用reply”）不会实际执行。
+            </span>
+          </div>
         )}
 
       </CardHeader>
