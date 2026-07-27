@@ -416,6 +416,27 @@ class MemoryService:
             logger.warning(f"画像管理调用失败: {exc}")
             return {"success": False, "error": str(exc)}
 
+    async def get_person_profile_snapshot(self, *, person_id: str) -> Dict[str, Any]:
+        """读取人物画像快照（纯存储层读取）。
+
+        只读取最近一次已生成的画像快照，不触发证据收集、向量召回或画像重建，
+        适用于鉴权器等只需要消费画像、不应产生额外模型调用的场景。
+        A_Memorix 未就绪或不存在快照时返回空字典。
+        """
+        normalized_person_id = str(person_id or "").strip()
+        if not normalized_person_id:
+            return {}
+        try:
+            kernel = await a_memorix_host_service._ensure_kernel()
+            metadata_store = kernel.metadata_store
+            if metadata_store is None:
+                return {}
+            snapshot = metadata_store.get_latest_person_profile_snapshot(normalized_person_id)
+            return snapshot if isinstance(snapshot, dict) else {}
+        except Exception as exc:
+            logger.debug(f"读取人物画像快照失败（A_Memorix 未就绪或无快照）: {exc}")
+            return {}
+
     async def feedback_admin(self, *, action: str, **kwargs) -> Dict[str, Any]:
         try:
             return await self._invoke_admin("memory_feedback_admin", action=action, **kwargs)

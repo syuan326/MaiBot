@@ -29,6 +29,7 @@ from src.config.model_configs import (
 )
 from src.config.official_configs import (
     AMemorixConfig,
+    AuthConfig,
     BotConfig,
     ChatConfig,
     ChineseTypoConfig,
@@ -1853,6 +1854,7 @@ async def get_config_section_schema(section_name: str):
     - bot: BotConfig
     - personality: PersonalityConfig
     - chat: ChatConfig
+    - auth: AuthConfig
     - visual: VisualConfig
     - message_receive: MessageReceiveConfig
     - emoji: EmojiConfig
@@ -1881,6 +1883,7 @@ async def get_config_section_schema(section_name: str):
         "bot": BotConfig,
         "personality": PersonalityConfig,
         "chat": ChatConfig,
+        "auth": AuthConfig,
         "visual": VisualConfig,
         "message_receive": MessageReceiveConfig,
         "emoji": EmojiConfig,
