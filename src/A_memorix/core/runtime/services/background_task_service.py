@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Coroutine, Dict, List, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
 import asyncio
 import time
@@ -23,6 +23,7 @@ class MemoryBackgroundTaskService(KernelServiceBase):
             self._ensure_background_task("episode_materialization", self._episode_materialization_loop)
             self._ensure_background_task("embedding_probe", self._embedding_probe_loop)
             self._ensure_background_task("paragraph_vector_backfill", self._paragraph_vector_backfill_loop)
+            self._ensure_background_task("relation_vector_backfill", self._relation_vector_backfill_loop)
             self._ensure_background_task("vector_index_training", self._vector_index_training_loop)
             self._ensure_background_task("memory_maintenance", self._memory_maintenance_loop)
             self._ensure_background_task("storage_cleanup", self._storage_cleanup_loop)
@@ -375,6 +376,87 @@ class MemoryBackgroundTaskService(KernelServiceBase):
             raise
         except Exception as exc:
             logger.warning(f"paragraph_vector_backfill loop 异常: {exc}")
+
+    def _relation_vector_backfill_enabled(self) -> bool:
+        # 关系向量化总开关与回填开关同时打开时，才为存量关系补写向量。
+        # 每轮读取活配置，保证热切换开关后无需重启后台任务即可生效。
+        return bool(self.relation_vectors_enabled) and bool(
+            self._cfg("retrieval.relation_vectorization.backfill_enabled", False)
+        )
+
+    async def _relation_vector_backfill_loop(self) -> None:
+        try:
+            while not self._background_stopping:
+                await asyncio.sleep(self._paragraph_vector_backfill_interval_seconds())
+                if self._background_stopping:
+                    break
+                if not self._relation_vector_backfill_enabled():
+                    continue
+                if self._is_embedding_degraded():
+                    continue
+                await self._run_relation_backfill_once(trigger="loop")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"relation_vector_backfill loop 异常: {exc}")
+
+    async def _run_relation_backfill_once(
+        self,
+        *,
+        limit: Optional[int] = None,
+        max_retry: Optional[int] = None,
+        trigger: str = "manual",
+    ) -> Dict[str, Any]:
+        """为存量关系补写向量一轮，状态流转复用 RelationWriteService 的状态机。"""
+        if self.metadata_store is None or self.relation_write_service is None or self.embedding_manager is None:
+            return {"success": False, "processed": 0, "done": 0, "failed": 0, "trigger": trigger}
+
+        safe_limit = max(
+            1,
+            int(limit or self._cfg("retrieval.relation_vectorization.backfill_batch_size", 64) or 64),
+        )
+        safe_retry = max(
+            1,
+            int(max_retry or self._cfg("retrieval.relation_vectorization.max_retry", 3) or 3),
+        )
+        rows = self.metadata_store.list_relations_by_vector_state(
+            states=["none", "failed", "pending"],
+            limit=safe_limit,
+            max_retry=safe_retry,
+        )
+        if not rows:
+            return {"success": True, "processed": 0, "done": 0, "failed": 0, "trigger": trigger}
+
+        typed_id = self._dual_vector_pools_enabled()
+        done = 0
+        failed = 0
+        for row in rows:
+            hash_value = str(row.get("hash", "") or "").strip()
+            if not hash_value:
+                continue
+            result = await self.relation_write_service.ensure_relation_vector(
+                hash_value=hash_value,
+                subject=str(row.get("subject", "") or "").strip(),
+                predicate=str(row.get("predicate", "") or "").strip(),
+                obj=str(row.get("object", "") or "").strip(),
+                typed_id=typed_id,
+            )
+            if result.vector_state == "ready":
+                done += 1
+            else:
+                failed += 1
+
+        if done:
+            self._persist()
+        if failed:
+            logger.warning(f"关系向量回填本轮存在失败: done={done} failed={failed} trigger={trigger}")
+        return {
+            "success": failed == 0,
+            "processed": done + failed,
+            "done": done,
+            "failed": failed,
+            "trigger": trigger,
+        }
 
     async def _person_profile_refresh_loop(self) -> None:
         try:

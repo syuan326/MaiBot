@@ -2136,6 +2136,7 @@ async def test_background_start_uses_kernel_patched_task_registration(
         "episode_materialization",
         "embedding_probe",
         "paragraph_vector_backfill",
+        "relation_vector_backfill",
         "vector_index_training",
         "memory_maintenance",
         "storage_cleanup",
@@ -2415,3 +2416,138 @@ async def test_summary_service_uses_payload_source_and_kernel_patched_boundaries
         "episode_source": "chat_summary:session-1",
         "stored_ids": ["summary-hash"],
     }
+
+
+def test_relation_vector_backfill_enabled_requires_both_switches() -> None:
+    kernel = SDKMemoryKernel(plugin_root=Path.cwd(), config={})
+    service = kernel._background_task_service
+
+    # 默认配置下两个开关都关闭，回填不生效
+    assert service._relation_vector_backfill_enabled() is False
+
+    # 只开总开关，不开回填开关，仍不生效
+    kernel.config = {"retrieval": {"relation_vectorization": {"enabled": True, "backfill_enabled": False}}}
+    kernel.relation_vectors_enabled = True
+    assert service._relation_vector_backfill_enabled() is False
+
+    # 只开回填开关，不开总开关，仍不生效
+    kernel.config = {"retrieval": {"relation_vectorization": {"enabled": False, "backfill_enabled": True}}}
+    kernel.relation_vectors_enabled = False
+    assert service._relation_vector_backfill_enabled() is False
+
+    # 两个开关同时打开才生效
+    kernel.config = {"retrieval": {"relation_vectorization": {"enabled": True, "backfill_enabled": True}}}
+    kernel.relation_vectors_enabled = True
+    assert service._relation_vector_backfill_enabled() is True
+
+
+@pytest.mark.asyncio
+async def test_run_relation_backfill_once_uses_relation_write_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class MetadataStoreStub:
+        def __init__(self) -> None:
+            self.queries: list[dict[str, Any]] = []
+
+        def list_relations_by_vector_state(
+            self,
+            states: List[str],
+            limit: int = 200,
+            max_retry: int | None = None,
+        ) -> List[Dict[str, Any]]:
+            self.queries.append({"states": list(states), "limit": limit, "max_retry": max_retry})
+            return [
+                {"hash": "rel-ok", "subject": "小A", "predicate": "喜欢", "object": "小B"},
+                {"hash": "rel-fail", "subject": "小C", "predicate": "讨厌", "object": "小D"},
+                {"hash": "", "subject": "空", "predicate": "空", "object": "空"},
+            ]
+
+    class RelationWriteServiceStub:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        async def ensure_relation_vector(
+            self,
+            hash_value: str,
+            subject: str,
+            predicate: str,
+            obj: str,
+            *,
+            typed_id: bool = False,
+            **kwargs: Any,
+        ) -> Any:
+            del kwargs
+            self.calls.append(
+                {
+                    "hash_value": hash_value,
+                    "subject": subject,
+                    "predicate": predicate,
+                    "obj": obj,
+                    "typed_id": typed_id,
+                }
+            )
+            state = "ready" if hash_value == "rel-ok" else "failed"
+            return SimpleNamespace(hash_value=hash_value, vector_state=state)
+
+    kernel = SDKMemoryKernel(
+        plugin_root=Path.cwd(),
+        config={"retrieval": {"relation_vectorization": {"enabled": True, "backfill_enabled": True}}},
+    )
+    metadata_store = MetadataStoreStub()
+    write_service = RelationWriteServiceStub()
+    kernel.metadata_store = metadata_store  # type: ignore[assignment]
+    kernel.relation_write_service = write_service  # type: ignore[assignment]
+    kernel.embedding_manager = object()  # type: ignore[assignment]
+    monkeypatch.setattr(kernel, "_dual_vector_pools_enabled", lambda: True)
+    persist_calls: list[str] = []
+    monkeypatch.setattr(kernel, "_persist", lambda: persist_calls.append("persist"))
+
+    result = await kernel._background_task_service._run_relation_backfill_once(trigger="loop")
+
+    assert metadata_store.queries == [
+        {"states": ["none", "failed", "pending"], "limit": 64, "max_retry": 3}
+    ]
+    assert write_service.calls == [
+        {"hash_value": "rel-ok", "subject": "小A", "predicate": "喜欢", "obj": "小B", "typed_id": True},
+        {"hash_value": "rel-fail", "subject": "小C", "predicate": "讨厌", "obj": "小D", "typed_id": True},
+    ]
+    assert result == {"success": False, "processed": 2, "done": 1, "failed": 1, "trigger": "loop"}
+    assert persist_calls == ["persist"]
+
+
+@pytest.mark.asyncio
+async def test_run_relation_backfill_once_skips_when_components_missing() -> None:
+    kernel = SDKMemoryKernel(plugin_root=Path.cwd(), config={})
+
+    result = await kernel._background_task_service._run_relation_backfill_once()
+
+    assert result == {"success": False, "processed": 0, "done": 0, "failed": 0, "trigger": "manual"}
+
+
+@pytest.mark.asyncio
+async def test_apply_retrieval_tuning_profile_refreshes_relation_vectors_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kernel = SDKMemoryKernel(plugin_root=Path.cwd(), config={})
+    assert kernel.relation_vectors_enabled is False
+
+    ready_bundle = kernel_module.SearchRuntimeBundle(
+        vector_store=object(),
+        graph_store=object(),
+        metadata_store=object(),
+        embedding_manager=object(),
+        retriever=object(),
+    )
+
+    def fake_build_search_runtime(**kwargs: Any) -> Any:
+        del kwargs
+        return ready_bundle
+
+    monkeypatch.setattr(kernel_module, "build_search_runtime", fake_build_search_runtime)
+    monkeypatch.setattr(kernel, "_refresh_runtime_dependents", lambda **kwargs: None)
+    monkeypatch.setattr(kernel, "_apply_runtime_sparse_mode", lambda: None)
+
+    result = await kernel.apply_retrieval_tuning_profile(
+        {"retrieval": {"relation_vectorization": {"enabled": True}}}
+    )
+
+    assert result["success"] is True
+    assert kernel.relation_vectors_enabled is True

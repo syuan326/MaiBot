@@ -71,6 +71,9 @@ class MemoryRuntimeConfigService(KernelServiceBase):
         if runtime_bundle.ready:
             self.config.clear()
             self.config.update(next_config)
+            # relation_vectors_enabled 只在内核 __init__ 赋值一次，热应用配置时必须同步刷新，
+            # 否则写入/重建/统计路径会继续使用旧开关值。
+            self.relation_vectors_enabled = bool(self._cfg("retrieval.relation_vectorization.enabled", False))
             self._runtime_bundle = runtime_bundle
             self.retriever = runtime_bundle.retriever
             self.threshold_filter = runtime_bundle.threshold_filter
