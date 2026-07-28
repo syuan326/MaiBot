@@ -19,6 +19,7 @@ import time
 
 from src.A_memorix.core.utils.profile_text import parse_profile_sections
 from src.chat.message_receive.message import SessionMessage
+from src.chat.utils.fixed_identity import build_fixed_identity_block
 from src.chat.utils.utils import is_bot_self
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions
 from src.common.logger import get_logger
@@ -289,8 +290,15 @@ async def collect_participant_identity_context(
         if len(relation_lines) >= AUTH_RELATION_EDGE_LIMIT:
             break
 
+    person_profiles_text = "\n".join(profile_blocks) if profile_blocks else "（无已知画像）"
+    # 固定身份规则是配置级的权威身份依据，一并提供给审核模型，
+    # 使"专属称呼被用于他人"能被身份矛盾/关系矛盾检查明确驳回
+    fixed_identity_block = build_fixed_identity_block()
+    if fixed_identity_block:
+        person_profiles_text = f"{person_profiles_text}\n\n{fixed_identity_block}"
+
     return ParticipantIdentityContext(
-        person_profiles_text="\n".join(profile_blocks) if profile_blocks else "（无已知画像）",
+        person_profiles_text=person_profiles_text,
         entity_relations_text="\n".join(relation_lines) if relation_lines else "（无已知人际关系）",
     )
 

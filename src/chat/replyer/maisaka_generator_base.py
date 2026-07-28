@@ -8,6 +8,7 @@ import time
 
 from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
+from src.chat.utils.fixed_identity import build_fixed_identity_block
 from src.chat.utils.utils import get_chat_type_and_target_info, is_bot_self
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions
 from src.common.data_models.message_component_data_model import (
@@ -545,6 +546,7 @@ class BaseMaisakaReplyGenerator:
                 group_chat_attention_block=self._build_group_chat_attention_block(session_id),
                 replyer_output_instruction=self._build_replyer_output_instruction(),
                 identity=self._build_personality_prompt(),
+                fixed_identity_block=build_fixed_identity_block(),
                 reply_style=self._select_reply_style(),
             )
         except Exception:

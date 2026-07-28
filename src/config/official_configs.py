@@ -191,6 +191,76 @@ class BotConfig(ConfigBase):
     """别人可能用来称呼麦麦的名字，用于辅助识别提及。"""
 
 
+class FixedIdentityRuleConfig(ConfigBase):
+    """固定身份规则配置类：将指定用户与专属称呼绑定，规则不可被对话或画像覆盖"""
+
+    platform: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "平台",
+                "en_US": "Platform",
+                "ja_JP": "プラットフォーム",
+            },
+            "x-widget": "input",
+            "x-icon": "layers",
+        },
+    )
+    """用户所在平台，例如 qq。"""
+
+    user_id: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "用户ID",
+                "en_US": "User ID",
+                "ja_JP": "ユーザーID",
+            },
+            "x-widget": "input",
+            "x-icon": "user",
+        },
+    )
+    """绑定用户在该平台上的账号ID。"""
+
+    name: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "识别名",
+                "en_US": "Display name",
+                "ja_JP": "表示名",
+            },
+            "x-widget": "input",
+            "x-icon": "id-card",
+        },
+    )
+    """该用户的识别名（昵称/群名片），帮助麦麦在聊天记录中认出此人。"""
+
+    aliases: list[str] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "专属称呼",
+                "en_US": "Exclusive aliases",
+                "ja_JP": "専用呼称",
+            },
+            "x-widget": "custom",
+            "x-icon": "tags",
+        },
+    )
+    """仅属于该用户的称呼，例如 哥哥；这些称呼禁止用于其他任何人。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        if not self.platform.strip():
+            raise ValueError("固定身份规则必须包含platform")
+        if not self.user_id.strip():
+            raise ValueError("固定身份规则必须包含user_id")
+        if not self.aliases:
+            raise ValueError("固定身份规则必须至少包含一个专属称呼")
+        return super().model_post_init(context)
+
+
 class PersonalityConfig(ConfigBase):
     """人格配置类"""
 
@@ -289,6 +359,28 @@ class PersonalityConfig(ConfigBase):
         },
     )
     """随机启用备用风格的概率；0 表示不随机切换。"""
+
+    fixed_identities: list[FixedIdentityRuleConfig] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "固定身份规则",
+                "en_US": "Fixed identity rules",
+                "ja_JP": "固定アイデンティティルール",
+            },
+            "advanced": True,
+            "x-widget": "custom",
+            "x-icon": "shield-check",
+        },
+    )
+    """将指定用户与专属称呼永久绑定（例如某用户是唯一的哥哥）；规则不可被对话内容或人物画像覆盖。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        for rule in self.fixed_identities:
+            if not isinstance(rule, FixedIdentityRuleConfig):
+                raise ValueError(f"固定身份规则必须是FixedIdentityRuleConfig类型，而不是{type(rule).__name__}")
+        return super().model_post_init(context)
 
 
 class ImageCacheCleanupConfig(ConfigBase):

@@ -15,6 +15,7 @@ import time
 
 from src.chat.heart_flow.heartFC_utils import CycleDetail
 from src.chat.message_receive.message import SessionMessage
+from src.chat.utils.fixed_identity import build_fixed_identity_block
 from src.cli.console import console
 from src.common.data_models.message_component_data_model import EmojiComponent, ImageComponent, MessageSequence, TextComponent
 from src.common.logger import get_logger
@@ -483,6 +484,11 @@ class MaisakaReasoningEngine:
         injected_messages: list[str] = []
         if deferred_tools_reminder:
             injected_messages.append(deferred_tools_reminder)
+
+        # 固定身份规则全局无条件注入，保证专属称呼的禁令对任何对话对象都生效
+        fixed_identity_block = build_fixed_identity_block()
+        if fixed_identity_block:
+            injected_messages.append(fixed_identity_block)
 
         async def build_heuristic_memory_message() -> str:
             try:
