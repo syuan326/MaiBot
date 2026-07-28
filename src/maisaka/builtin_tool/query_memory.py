@@ -38,7 +38,7 @@ def get_tool_spec(*, enabled: bool = True) -> ToolSpec:
                 },
                 "mode": {
                     "type": "string",
-                    "description": "search事实偏好，time时间段，episode经历，aggregate整体，hybrid不确定。",
+                    "description": "search事实/关键词偏好，time时间段，episode经历，aggregate整体，hybrid关键词+时间混合。time/hybrid 必须同时提供 time_start 或 time_end；不确定时用 search。",
                     "enum": sorted(_ALLOWED_QUERY_MODES),
                     "default": "search",
                 },
@@ -48,11 +48,11 @@ def get_tool_spec(*, enabled: bool = True) -> ToolSpec:
                 },
                 "time_start": {
                     "type": "string",
-                    "description": "起始时间。",
+                    "description": "起始时间；time/hybrid 模式必填（与 time_end 至少其一）。",
                 },
                 "time_end": {
                     "type": "string",
-                    "description": "结束时间。",
+                    "description": "结束时间；time/hybrid 模式必填（与 time_start 至少其一）。",
                 },
                 "respect_filter": {
                     "type": "boolean",
@@ -209,6 +209,19 @@ async def handle_tool(
             "query_memory 需要提供 query，或至少提供 time_start/time_end 中的一个。",
         )
 
+    requested_mode = mode
+    mode_time_downgraded = False
+    if time_start is None and time_end is None:
+        if mode == "hybrid":
+            # hybrid 缺少时间范围时语义上等同关键词检索，直接降级避免底层校验失败
+            mode = "search"
+            mode_time_downgraded = True
+        elif mode == "time":
+            return tool_ctx.build_failure_result(
+                invocation.tool_name,
+                "time 模式必须提供 time_start 或 time_end 中的至少一个；若不确定时间范围，请改用 search 模式。",
+            )
+
     session_id = str(runtime.session_id or "").strip()
     platform = str(chat_stream.platform or "").strip()
     user_id = str(chat_stream.user_id or "").strip()
@@ -228,7 +241,8 @@ async def handle_tool(
 
     logger.info(
         f"{runtime.log_prefix} 触发长期记忆检索工具: "
-        f"mode={mode} query={clean_query!r} person_name={person_name!r} person_id={person_id!r}"
+        f"mode={requested_mode} effective_mode={mode} query={clean_query!r} "
+        f"person_name={person_name!r} person_id={person_id!r}"
     )
     try:
         result = await memory_service.search(
@@ -285,8 +299,9 @@ async def handle_tool(
     structured_content.update(
         {
             "query": clean_query,
-            "mode": mode,
+            "mode": requested_mode,
             "effective_mode": effective_mode,
+            "mode_time_downgraded": mode_time_downgraded,
             "limit": limit,
             "chat_id": session_id,
             "person_name": person_name,
@@ -312,6 +327,8 @@ async def handle_tool(
         )
 
     content = _build_success_content(result, limit=limit)
+    if mode_time_downgraded:
+        content = f"提示：hybrid 模式未提供时间范围（time_start/time_end），已自动降级为关键词检索（search）。\n{content}"
     if fallback_applied:
         content = f"提示：人物定向检索未命中，已自动降级为关键词检索。\n{content}"
     metadata: Dict[str, Any] = with_memory_feedback_task()
