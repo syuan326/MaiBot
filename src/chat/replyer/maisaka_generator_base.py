@@ -47,7 +47,7 @@ from src.maisaka.context.messages import (
 from src.maisaka.context.planner_messages import extract_quote_ids_from_message_sequence
 from src.maisaka.display.prompt_cli_renderer import PromptCLIVisualizer
 from src.maisaka.memory.mid_term import is_mid_term_memory_message
-from src.maisaka.monitor.events import emit_auth_rejected
+from src.maisaka.monitor.events import emit_auth_result
 from src.maisaka.visual.message_limiter import limit_latest_images_in_messages
 from src.plugin_runtime.hook_payloads import deserialize_prompt_messages, serialize_prompt_messages
 
@@ -1224,14 +1224,24 @@ class BaseMaisakaReplyGenerator:
                 filtered_history=filtered_history,
                 session_id=preview_chat_id,
             )
+            # 通过（含异常放行）也广播鉴权结果事件，供麦麦观察展示鉴权卡片
+            if auth_decision is not None and auth_decision.passed and global_config.auth.emit_passed_events:
+                await emit_auth_result(
+                    session_id=preview_chat_id,
+                    stage="replyer",
+                    passed=True,
+                    audit_error=auth_decision.audit_error,
+                    identity_check=auth_decision.identity_check,
+                )
             if auth_decision is not None and not auth_decision.passed:
                 auth_retry_count += 1
                 max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
                 reject_reason = build_replyer_auth_reject_reason(auth_decision)
                 auth_is_final = auth_retry_count > max_auth_retries
-                await emit_auth_rejected(
+                await emit_auth_result(
                     session_id=preview_chat_id,
                     stage="replyer",
+                    passed=False,
                     attempt=auth_retry_count,
                     max_retries=max_auth_retries,
                     final=auth_is_final,
@@ -1241,6 +1251,7 @@ class BaseMaisakaReplyGenerator:
                         for issue in auth_decision.issues
                     ],
                     rejected_text=" ".join(response_text.split())[:300],
+                    identity_check=auth_decision.identity_check,
                 )
                 if not auth_is_final:
                     retry_events.append(

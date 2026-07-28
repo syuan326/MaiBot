@@ -960,6 +960,62 @@ class ChatConfig(ConfigBase):
     """如何回复、引用回复与聊天 Prompt 配置。"""
 
 
+class AuthIdentityRuleConfig(ConfigBase):
+    """鉴权固定身份规则：将指定用户与专属称呼绑定，由鉴权器做UID硬比对并拦截称呼滥用"""
+
+    platform: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "平台",
+                "en_US": "Platform",
+                "ja_JP": "プラットフォーム",
+            },
+            "x-widget": "input",
+            "x-icon": "layers",
+        },
+    )
+    """用户所在平台，例如 qq。"""
+
+    user_id: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "用户ID",
+                "en_US": "User ID",
+                "ja_JP": "ユーザーID",
+            },
+            "x-widget": "input",
+            "x-icon": "user",
+        },
+    )
+    """绑定用户在该平台上的账号ID；名字无需配置，鉴权时会按此ID自动查询已知昵称和各群名片。"""
+
+    aliases: list[str] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "专属称呼",
+                "en_US": "Exclusive aliases",
+                "ja_JP": "専用呼称",
+            },
+            "x-widget": "custom",
+            "x-icon": "tags",
+        },
+    )
+    """仅属于该用户的称呼，例如 哥哥；这些称呼禁止用于其他任何人。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        if not self.platform.strip():
+            raise ValueError("鉴权固定身份规则必须包含platform")
+        if not self.user_id.strip():
+            raise ValueError("鉴权固定身份规则必须包含user_id")
+        if not self.aliases:
+            raise ValueError("鉴权固定身份规则必须至少包含一个专属称呼")
+        return super().model_post_init(context)
+
+
 class AuthConfig(ConfigBase):
     """鉴权配置类"""
 
@@ -1040,6 +1096,43 @@ class AuthConfig(ConfigBase):
         },
     )
     """鉴权审核时提供给审核模型的最近聊天消息条数。"""
+
+    identity_rules: list[AuthIdentityRuleConfig] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "固定身份规则",
+                "en_US": "Fixed identity rules",
+                "ja_JP": "固定アイデンティティルール",
+            },
+            "x-widget": "custom",
+            "x-icon": "shield-check",
+            "advanced": True,
+        },
+    )
+    """将指定用户（平台+用户ID）与专属称呼永久绑定（例如某用户是唯一的哥哥）；鉴权器会做UID硬比对，称呼被用于他人时驳回。"""
+
+    emit_passed_events: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "产生鉴权通过事件",
+                "en_US": "Emit auth passed events",
+                "ja_JP": "認証通過イベントを発行",
+            },
+            "x-widget": "switch",
+            "x-icon": "activity",
+            "advanced": True,
+        },
+    )
+    """开启后麦麦观察会显示鉴权通过的卡片；关闭后只产生鉴权驳回事件，减少事件量。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        for rule in self.identity_rules:
+            if not isinstance(rule, AuthIdentityRuleConfig):
+                raise ValueError(f"固定身份规则必须是AuthIdentityRuleConfig类型，而不是{type(rule).__name__}")
+        return super().model_post_init(context)
 
 
 class AttentionDriftConfig(ConfigBase):

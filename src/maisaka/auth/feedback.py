@@ -55,7 +55,8 @@ def build_planner_auth_feedback_message(
     """
 
     lines = [
-        "你的上一轮规划未通过身份核对，已被驳回，其中的工具调用均未执行。请根据驳回原因重新规划。",
+        "【鉴权驳回-必须修正】你的上一轮规划未通过身份核对，已被驳回，其中的工具调用均未执行。"
+        "请认真阅读驳回原因并修正身份错误后重新规划，不要重复同样的错误。",
         f"驳回原因：{decision.reason or '输出中存在用户身份混淆'}",
     ]
     if decision.issues:
@@ -73,6 +74,11 @@ def build_planner_auth_feedback_message(
             tool_lines.append(f"- {tool_call.func_name}({_truncate_preview(args_text, MAX_REJECTED_TOOL_ARGS_PREVIEW_CHARS)})")
         lines.append("你上一轮尝试调用的工具（均未执行）：")
         lines.extend(tool_lines)
+
+    # 固定身份规则在驳回反馈中再次提醒，确保重新规划时规则就在眼前
+    if decision.identity_check_text.strip():
+        lines.append("【固定身份规则-再次提醒，必须遵守】")
+        lines.append(decision.identity_check_text.strip())
 
     return ReferenceMessage(
         content="\n".join(lines),
@@ -93,4 +99,8 @@ def build_replyer_auth_reject_reason(decision: AuthDecision) -> str:
         ).strip()
         if issue_text:
             reason = f"{reason}（{issue_text}）" if reason else issue_text
-    return f"身份核对未通过：{reason}" if reason else "身份核对未通过，回复中存在用户身份混淆"
+    reason = f"【鉴权驳回-必须修正】身份核对未通过：{reason}" if reason else "【鉴权驳回-必须修正】身份核对未通过，回复中存在用户身份混淆"
+    # 固定身份规则在驳回反馈中再次提醒，确保重新生成时规则就在眼前
+    if decision.identity_check_text.strip():
+        reason = f"{reason}\n【固定身份规则-再次提醒，必须遵守】\n{decision.identity_check_text.strip()}"
+    return reason

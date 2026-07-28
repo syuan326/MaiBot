@@ -554,41 +554,50 @@ async def emit_planner_finalized(
     })
 
 
-async def emit_auth_rejected(
+async def emit_auth_result(
     *,
     session_id: str,
     stage: str,
-    attempt: int,
-    max_retries: int,
-    final: bool,
-    reason: str,
+    passed: bool,
+    audit_error: bool = False,
+    attempt: int = 0,
+    max_retries: int = 0,
+    final: bool = False,
+    reason: str = "",
     issues: Optional[List[Dict[str, Any]]] = None,
     rejected_text: str = "",
+    identity_check: Optional[Dict[str, Any]] = None,
     cycle_id: Optional[int] = None,
 ) -> None:
-    """广播鉴权器驳回事件。
+    """广播鉴权结果事件（通过、驳回、异常放行都会广播，供麦麦观察展示鉴权卡片）。
 
     Args:
         session_id: 当前聊天流 ID。
-        stage: 驳回发生的阶段，planner 或 replyer。
-        attempt: 当前是第几次驳回（从 1 开始）。
+        stage: 鉴权发生的阶段，planner 或 replyer。
+        passed: 是否通过身份核对。
+        audit_error: 是否为审核模型调用异常后的放行（fail-open）。
+        attempt: 当前是第几次驳回（从 1 开始）；通过事件为 0。
         max_retries: 配置的最大重试次数。
         final: 是否已重试耗尽并放弃本轮。
-        reason: 驳回理由。
+        reason: 驳回理由；通过时为空。
         issues: 审核发现的身份问题列表。
         rejected_text: 被驳回内容的截断预览。
+        identity_check: 固定身份 UID 核查的结构化结果；未配置规则时为 None。
         cycle_id: 关联的思考循环编号；replyer 阶段无法获取时为空。
     """
 
-    await _broadcast("auth.rejected", {
+    await _broadcast("auth.result", {
         "session_id": session_id,
         "cycle_id": cycle_id,
         "stage": stage,
+        "passed": passed,
+        "audit_error": audit_error,
         "attempt": attempt,
         "max_retries": max_retries,
         "final": final,
         "reason": reason,
         "issues": _normalize_payload_value(list(issues or [])),
         "rejected_text": rejected_text,
+        "identity_check": _normalize_payload_value(identity_check) if identity_check else None,
         "timestamp": time.time(),
     })

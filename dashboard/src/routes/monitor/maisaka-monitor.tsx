@@ -22,6 +22,8 @@ import {
   ImageIcon,
   PauseCircle,
   ShieldAlert,
+  ShieldCheck,
+  ShieldQuestion,
   Timer,
   Wrench,
   XCircle,
@@ -46,6 +48,7 @@ import { cn } from '@/lib/utils'
 
 import type {
   AuthRejectedEvent,
+  AuthResultEvent,
   MaisakaMessageMedia,
   MaisakaToolCall,
   MessageIngestedEvent,
@@ -285,6 +288,8 @@ interface MonitorStats {
 
 interface StageStatusPanelProps {
   autoScroll: boolean
+  showAuthPassed: boolean
+  onToggleAuthPassed: () => void
   onClearTimeline: () => void
   onScrollToBottom: () => void
   stats: MonitorStats
@@ -293,6 +298,8 @@ interface StageStatusPanelProps {
 
 function MonitorStatusActions({
   autoScroll,
+  showAuthPassed,
+  onToggleAuthPassed,
   onClearTimeline,
   onScrollToBottom,
   stats,
@@ -315,6 +322,16 @@ function MonitorStatusActions({
         </Tooltip>
       </TooltipProvider>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 px-2 text-[11px]"
+          onClick={onToggleAuthPassed}
+          title={showAuthPassed ? '隐藏鉴权通过卡片' : '显示鉴权通过卡片'}
+        >
+          <ShieldCheck className={cn('h-3 w-3 mr-1', showAuthPassed ? 'text-emerald-500' : 'text-muted-foreground')} />
+          鉴权通过
+        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -342,6 +359,8 @@ function MonitorStatusActions({
 
 function StageStatusPanel({
   autoScroll,
+  showAuthPassed,
+  onToggleAuthPassed,
   onClearTimeline,
   onScrollToBottom,
   stats,
@@ -350,6 +369,8 @@ function StageStatusPanel({
   const actions = (
       <MonitorStatusActions
         autoScroll={autoScroll}
+        showAuthPassed={showAuthPassed}
+        onToggleAuthPassed={onToggleAuthPassed}
         onClearTimeline={onClearTimeline}
         onScrollToBottom={onScrollToBottom}
         stats={stats}
@@ -608,6 +629,115 @@ function AuthRejectCard({ data }: { data: AuthRejectedEvent }) {
           </Badge>
           <span className="ml-auto text-xs text-muted-foreground">{formatTimestamp(data.timestamp)}</span>
         </div>
+        {data.reason && (
+          <p className="text-sm text-foreground/90">{data.reason}</p>
+        )}
+        {data.issues && data.issues.length > 0 && (
+          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+            {data.issues.map((issue, idx) => (
+              <li key={`${issue.issue_type}-${idx}`}>
+                {AUTH_ISSUE_TYPE_LABELS[issue.issue_type] ?? issue.issue_type}：{issue.detail}
+              </li>
+            ))}
+          </ul>
+        )}
+        {data.rejected_text && (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              被驳回的内容
+            </summary>
+            <CollapsibleText text={data.rejected_text} maxLines={4} className="mt-1 text-muted-foreground" />
+          </details>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** 固定身份核查结果区块：展示鉴权识别到的用户及其目标用户判定 */
+function AuthIdentityCheckBlock({ check }: { check: NonNullable<AuthResultEvent['identity_check']> }) {
+  const senderDisplay = check.sender_name || check.sender_user_id || '未知用户'
+  return (
+    <div className="mt-1 flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+      <span>
+        识别用户：<span className="text-foreground/90 font-medium">{senderDisplay}</span>
+        {check.sender_user_id && <span className="ml-1">（user_id={check.sender_user_id}）</span>}
+      </span>
+      {check.is_target ? (
+        <>
+          <span>·</span>
+          <span className="text-emerald-600 dark:text-emerald-400">目标用户</span>
+          {check.aliases.map((alias) => (
+            <Badge key={alias} variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+              专属称呼「{alias}」
+            </Badge>
+          ))}
+        </>
+      ) : (
+        <>
+          <span>·</span>
+          <span className="text-amber-600 dark:text-amber-400">非目标用户</span>
+          {check.aliases.map((alias) => (
+            <Badge key={alias} variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400">
+              禁止称呼「{alias}」
+            </Badge>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** 鉴权结果卡片：通过（绿色紧凑）/ 驳回（红或琥珀）/ 审核异常放行（灰色）三态 */
+function AuthResultCard({ data }: { data: AuthResultEvent }) {
+  const stageLabel = data.stage === 'replyer' ? 'Replyer' : 'Planner'
+  const isAuditError = data.passed && data.audit_error
+
+  const tone = !data.passed
+    ? (data.final ? 'rejected-final' : 'rejected-retry')
+    : isAuditError
+      ? 'audit-error'
+      : 'passed'
+
+  const toneClass = {
+    'rejected-final': 'border-red-500/40 bg-red-500/5',
+    'rejected-retry': 'border-amber-500/40 bg-amber-500/5',
+    'audit-error': 'border-muted-foreground/30 bg-muted/30',
+    passed: 'border-emerald-500/30 bg-emerald-500/5',
+  }[tone]
+  const iconClass = {
+    'rejected-final': 'bg-red-500/15 text-red-500',
+    'rejected-retry': 'bg-amber-500/15 text-amber-500',
+    'audit-error': 'bg-muted-foreground/15 text-muted-foreground',
+    passed: 'bg-emerald-500/15 text-emerald-500',
+  }[tone]
+  const title = {
+    'rejected-final': '鉴权驳回',
+    'rejected-retry': '鉴权驳回',
+    'audit-error': '审核异常-已放行',
+    passed: '鉴权通过',
+  }[tone]
+
+  return (
+    <div className={cn('flex items-start gap-3 rounded-md border px-3 py-2 shadow-sm', toneClass)}>
+      <div className={cn('mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full', iconClass)}>
+        {!data.passed ? <ShieldAlert className="h-3.5 w-3.5" /> : isAuditError ? <ShieldQuestion className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span className="text-sm font-medium">{title}</span>
+          <Badge variant="outline" className="text-[10px]">{stageLabel}</Badge>
+          {!data.passed && (
+            <Badge variant={data.final ? 'destructive' : 'secondary'} className="text-[10px]">
+              {data.final ? `第 ${data.attempt} 次 · 已放弃本轮` : `第 ${data.attempt}/${data.max_retries} 次 · 将重试`}
+            </Badge>
+          )}
+          {isAuditError && (
+            <Badge variant="secondary" className="text-[10px]">审核模型调用失败，本次未实际审核</Badge>
+          )}
+          <span className="ml-auto text-xs text-muted-foreground">{formatTimestamp(data.timestamp)}</span>
+        </div>
+        {data.identity_check && <AuthIdentityCheckBlock check={data.identity_check} />}
         {data.reason && (
           <p className="text-sm text-foreground/90">{data.reason}</p>
         )}
@@ -1228,6 +1358,8 @@ function TimelineEventRenderer({
       return <ReplierResponseCard data={entry.data as ReplierResponseEvent} />
     case 'auth.rejected':
       return <AuthRejectCard data={entry.data as AuthRejectedEvent} />
+    case 'auth.result':
+      return <AuthResultCard data={entry.data as AuthResultEvent} />
     // planner.request, replier.request 和 session.start 通常不需要在 timeline 中主要展示
     default:
       return null
@@ -1251,6 +1383,10 @@ export function MaisakaMonitor() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const [showAuthPassed, setShowAuthPassed] = useState(() => {
+    const saved = localStorage.getItem('maisaka-monitor-show-auth-passed')
+    return saved !== 'false'
+  })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('maisaka-monitor-sidebar-collapsed')
     return saved !== 'false'
@@ -1272,6 +1408,10 @@ export function MaisakaMonitor() {
   useEffect(() => {
     localStorage.setItem('maisaka-monitor-sidebar-collapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem('maisaka-monitor-show-auth-passed', String(showAuthPassed))
+  }, [showAuthPassed])
 
   useEffect(() => {
     const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null
@@ -1314,11 +1454,21 @@ export function MaisakaMonitor() {
         || entry.type === 'auth.rejected'
       ) {
         visibleEntries.push(entry)
+        continue
+      }
+
+      if (entry.type === 'auth.result') {
+        const data = entry.data as AuthResultEvent
+        // 鉴权通过（含异常放行）卡片可由过滤开关关闭
+        if (data.passed && !showAuthPassed) {
+          continue
+        }
+        visibleEntries.push(entry)
       }
     }
 
     return visibleEntries
-  }, [timeline])
+  }, [timeline, showAuthPassed])
 
   const timelineVirtualizer = useVirtualizer({
     count: visibleTimelineEntries.length,
@@ -1428,6 +1578,8 @@ export function MaisakaMonitor() {
         {/* 时间线 */}
         <StageStatusPanel
           autoScroll={autoScroll}
+          showAuthPassed={showAuthPassed}
+          onToggleAuthPassed={() => setShowAuthPassed((value) => !value)}
           onClearTimeline={clearTimeline}
           onScrollToBottom={() => scrollToBottom('smooth')}
           stats={stats}

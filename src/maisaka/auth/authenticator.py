@@ -31,6 +31,7 @@ from src.services.llm_service import LLMServiceClient
 from src.services.memory_service import memory_service
 
 from .decision import AuthDecision, IdentityIssue
+from .identity_rules import build_identity_check_block
 
 logger = get_logger("maisaka_auth")
 
@@ -111,6 +112,50 @@ def format_tool_calls_for_auth(tool_calls: Sequence[ToolCall]) -> str:
         args_text = json.dumps(tool_call.args or {}, ensure_ascii=False)
         lines.append(f"- {tool_call.func_name}({args_text})")
     return "\n".join(lines)
+
+
+def _sender_ref_from_session_message(message: SessionMessage) -> Tuple[str, str, str]:
+    """从真实会话消息提取发送者身份信息 (platform, user_id, 显示名)。"""
+    user_info = message.message_info.user_info
+    user_id = str(user_info.user_id or "").strip()
+    user_name = (user_info.user_cardname or user_info.user_nickname or user_id or "未知用户").strip()
+    return str(message.platform or "").strip(), user_id, user_name
+
+
+def _resolve_planner_check_sender(
+    chat_history: Sequence[LLMContextMessage],
+    tool_calls: Sequence[ToolCall],
+) -> Tuple[str, str, str]:
+    """解析 Planner 审核的"当前消息"发送者 (platform, user_id, 显示名)。
+
+    优先取回复动作的目标消息发送者（规划器打算回复谁，最精确）；
+    否则取聊天历史中最近一条真实用户消息（非 bot 自己）的发送者。
+    """
+    for tool_call in tool_calls:
+        if tool_call.func_name != "reply":
+            continue
+        target_message_id = str((tool_call.args or {}).get("msg_id") or "").strip()
+        if not target_message_id:
+            continue
+        for message in reversed(chat_history):
+            if (
+                isinstance(message, SessionBackedMessage)
+                and message.message_id == target_message_id
+                and message.original_message is not None
+            ):
+                return _sender_ref_from_session_message(message.original_message)
+
+    for message in reversed(chat_history):
+        if not isinstance(message, SessionBackedMessage):
+            continue
+        original = message.original_message
+        if original is None:
+            continue
+        user_id = str(original.message_info.user_info.user_id or "").strip()
+        if not user_id or is_bot_self(original.platform, user_id):
+            continue
+        return _sender_ref_from_session_message(original)
+    return "", "", ""
 
 
 @dataclass(slots=True)
@@ -384,12 +429,21 @@ class Authenticator:
         if not history_text:
             return AuthDecision(passed=True)
 
+        # 固定身份 UID 硬比对：Planner 侧以"当前消息发送者"（优先回复动作的目标消息发送者）为准
+        sender_platform, sender_user_id, sender_name = _resolve_planner_check_sender(chat_history, tool_calls)
+        identity_check = build_identity_check_block(
+            sender_platform,
+            sender_user_id,
+            stage="planner",
+            sender_name=sender_name,
+        )
         identity_context = await collect_participant_identity_context(chat_history)
         prompt = load_prompt(
             "auth_planner_check",
             bot_name=global_config.bot.nickname,
             person_profiles=identity_context.person_profiles_text,
             entity_relations=identity_context.entity_relations_text,
+            fixed_identity_check=identity_check.block_text or "（未配置固定身份规则）",
             chat_history=history_text,
             planner_thought=thought_text.strip() or "（无）",
             planner_tool_calls=format_tool_calls_for_auth(tool_calls),
@@ -400,10 +454,18 @@ class Authenticator:
                 request_type=PLANNER_AUTH_REQUEST_TYPE,
                 session_id=session_id,
             )
-            return parse_auth_decision(raw_response)
+            decision = parse_auth_decision(raw_response)
+            decision.identity_check = identity_check.payload
+            decision.identity_check_text = identity_check.block_text
+            return decision
         except Exception as exc:
             logger.exception(f"Planner 输出鉴权审核失败，已放行本次输出: {exc}")
-            return AuthDecision(passed=True)
+            return AuthDecision(
+                passed=True,
+                audit_error=True,
+                identity_check=identity_check.payload,
+                identity_check_text=identity_check.block_text,
+            )
 
     async def check_replyer_output(
         self,
@@ -426,12 +488,21 @@ class Authenticator:
             return AuthDecision(passed=True)
 
         target_message_id, target_user_name, target_user_id, target_text = self._describe_target_message(reply_message)
+        # 固定身份 UID 硬比对：Replyer 侧以被回复目标消息的发送者为准
+        target_platform = str(reply_message.platform or "").strip() if reply_message is not None else ""
+        identity_check = build_identity_check_block(
+            target_platform,
+            target_user_id,
+            stage="replyer",
+            sender_name=target_user_name,
+        )
         identity_context = await collect_participant_identity_context(chat_history)
         prompt = load_prompt(
             "auth_replyer_check",
             bot_name=global_config.bot.nickname,
             person_profiles=identity_context.person_profiles_text,
             entity_relations=identity_context.entity_relations_text,
+            fixed_identity_check=identity_check.block_text or "（未配置固定身份规则）",
             chat_history=history_text,
             target_message_id=target_message_id,
             target_user_name=target_user_name,
@@ -445,10 +516,18 @@ class Authenticator:
                 request_type=REPLYER_AUTH_REQUEST_TYPE,
                 session_id=session_id,
             )
-            return parse_auth_decision(raw_response)
+            decision = parse_auth_decision(raw_response)
+            decision.identity_check = identity_check.payload
+            decision.identity_check_text = identity_check.block_text
+            return decision
         except Exception as exc:
             logger.exception(f"Replyer 输出鉴权审核失败，已放行本次回复: {exc}")
-            return AuthDecision(passed=True)
+            return AuthDecision(
+                passed=True,
+                audit_error=True,
+                identity_check=identity_check.payload,
+                identity_check_text=identity_check.block_text,
+            )
 
     @staticmethod
     def _describe_target_message(reply_message: Optional[SessionMessage]) -> Tuple[str, str, str, str]:

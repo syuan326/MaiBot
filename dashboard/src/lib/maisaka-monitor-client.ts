@@ -291,6 +291,31 @@ export interface AuthRejectedEvent {
   timestamp: number
 }
 
+export interface AuthIdentityCheck {
+  sender_user_id: string
+  sender_name: string
+  is_target: boolean
+  known_names: string[]
+  aliases: string[]
+  summary: string
+}
+
+export interface AuthResultEvent {
+  session_id: string
+  cycle_id: number | null
+  stage: 'planner' | 'replyer' | string
+  passed: boolean
+  audit_error: boolean
+  attempt: number
+  max_retries: number
+  final: boolean
+  reason: string
+  issues: AuthRejectedIssue[]
+  rejected_text: string
+  identity_check: AuthIdentityCheck | null
+  timestamp: number
+}
+
 // ─── 统一事件联合类型 ─────────────────────────────────────────
 
 export type MaisakaMonitorEvent =
@@ -311,6 +336,7 @@ export type MaisakaMonitorEvent =
   | { type: 'replier.request'; data: ReplierRequestEvent }
   | { type: 'replier.response'; data: ReplierResponseEvent }
   | { type: 'auth.rejected'; data: AuthRejectedEvent }
+  | { type: 'auth.result'; data: AuthResultEvent }
 
 export type MaisakaEventListener = (event: MaisakaMonitorEvent) => void
 

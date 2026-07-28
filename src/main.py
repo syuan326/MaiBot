@@ -120,6 +120,13 @@ class MainSystem:
         """初始化其他组件"""
         init_start_time = time.time()
 
+        # 固定身份规则由鉴权器执行：配置了规则但未启用鉴权器时明确提醒，避免规则静默失效
+        if global_config.auth.identity_rules and not global_config.auth.enabled:
+            logger.warning(
+                "已配置固定身份规则（auth.identity_rules），但鉴权器未启用（auth.enabled=false），"
+                "规则不会生效；如需启用请在 WebUI「鉴权」配置中打开。"
+            )
+
         await config_manager.start_file_watcher()
 
         # 插件 Runner 启动最重，尽早发起以便和后续初始化并行。

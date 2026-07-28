@@ -73,7 +73,7 @@ from src.maisaka.memory.mid_term import (
     is_mid_term_memory_reference_message,
 )
 from src.maisaka.monitor.events import (
-    emit_auth_rejected,
+    emit_auth_result,
     emit_planner_finalized,
 )
 from src.maisaka.memory.person_profile import build_person_profile_injection_messages
@@ -1068,15 +1068,26 @@ class MaisakaReasoningEngine:
                             # 鉴权：在提交历史与执行工具之前检查 Planner 输出是否存在身份混淆
                             if state.response is not None:
                                 auth_decision = await self._check_planner_auth(state.response)
+                                # 通过（含异常放行）也广播鉴权结果事件，供麦麦观察展示鉴权卡片
+                                if auth_decision is not None and auth_decision.passed and global_config.auth.emit_passed_events:
+                                    await emit_auth_result(
+                                        session_id=self._runtime.session_id,
+                                        cycle_id=cycle_detail.cycle_id,
+                                        stage="planner",
+                                        passed=True,
+                                        audit_error=auth_decision.audit_error,
+                                        identity_check=auth_decision.identity_check,
+                                    )
                                 if auth_decision is not None and not auth_decision.passed:
                                     planner_auth_reject_count += 1
                                     self._inject_planner_auth_feedback(state.response, auth_decision)
                                     max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
                                     auth_is_final = planner_auth_reject_count > max_auth_retries
-                                    await emit_auth_rejected(
+                                    await emit_auth_result(
                                         session_id=self._runtime.session_id,
                                         cycle_id=cycle_detail.cycle_id,
                                         stage="planner",
+                                        passed=False,
                                         attempt=planner_auth_reject_count,
                                         max_retries=max_auth_retries,
                                         final=auth_is_final,
@@ -1088,6 +1099,7 @@ class MaisakaReasoningEngine:
                                         rejected_text=" ".join(
                                             self._get_effective_planner_thought(state.response).split()
                                         )[:300],
+                                        identity_check=auth_decision.identity_check,
                                     )
                                     if not auth_is_final:
                                         logger.warning(
