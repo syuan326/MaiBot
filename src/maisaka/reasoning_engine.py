@@ -70,8 +70,14 @@ from src.maisaka.memory.mid_term import (
     is_mid_term_memory_reference_message,
 )
 from src.maisaka.monitor.events import (
+    emit_auth_result,
     emit_planner_finalized,
 )
+from src.maisaka.auth import authenticator
+from src.maisaka.auth.decision import AuthDecision
+from src.maisaka.auth.feedback import build_planner_auth_feedback_message, build_rejected_assistant_message
+from src.maisaka.auth.input_guard import input_guard
+from src.maisaka.auth.new_user_guide import new_user_guide
 from src.maisaka.memory.person_profile import build_person_profile_injection_messages
 from src.maisaka.context.planner_messages import build_planner_user_prefix_from_session_message
 from src.maisaka.visual.mode_utils import resolve_enable_visual_planner
@@ -507,6 +513,16 @@ class MaisakaReasoningEngine:
         if heuristic_memory_message:
             injected_messages.append(heuristic_memory_message)
         injected_messages.extend(profile_messages)
+        # 输入注入安全警告：读取会话上未消费的注入警告并注入（一次性消费）
+        if global_config.auth.enable_input_detection:
+            warning_text = input_guard.build_warning_text(str(self._runtime.session_id or ""))
+            if warning_text:
+                injected_messages.insert(0, warning_text)
+        # 新用户识别引导：读取会话上未消费的新成员提醒并注入（一次性消费）
+        if global_config.auth.enable_new_user_guide:
+            guide_text = new_user_guide.build_guide_text(str(self._runtime.session_id or ""))
+            if guide_text:
+                injected_messages.insert(0, guide_text)
         return injected_messages
 
     def _refresh_jargon_reference_message(self) -> Optional[ReferenceMessage]:
@@ -618,6 +634,33 @@ class MaisakaReasoningEngine:
         self._runtime._reset_consecutive_wait_count("planner_no_tool_end")
         self._runtime._enter_stop_state()
         planner_extra_lines.append(status_line)
+
+    async def _check_planner_auth(self, response: ChatResponse) -> Optional[AuthDecision]:
+        """对 Planner 输出执行鉴权身份核对；未启用或无内容可检时返回 None。"""
+
+        if not global_config.auth.enabled or not global_config.auth.check_planner:
+            return None
+        thought_text = self._get_planner_content(response)
+        if not thought_text.strip() and not response.tool_calls:
+            return None
+        return await authenticator.check_planner_output(
+            thought_text=thought_text,
+            tool_calls=response.tool_calls,
+            chat_history=self._runtime._chat_history,
+            session_id=self._runtime.session_id,
+        )
+
+    def _inject_planner_auth_feedback(self, response: ChatResponse, decision: AuthDecision) -> None:
+        """把被驳回的 Planner 输出与鉴权反馈写入历史，供下一轮重新规划参考。"""
+
+        self._runtime._chat_history.append(build_rejected_assistant_message(response.raw_message))
+        self._runtime._chat_history.append(
+            build_planner_auth_feedback_message(
+                thought_text=self._get_planner_content(response),
+                tool_calls=response.tool_calls,
+                decision=decision,
+            )
+        )
 
     async def _handle_planner_response_actions(
         self,
@@ -1001,6 +1044,7 @@ class MaisakaReasoningEngine:
                     if force_continue_reason := self._runtime._consume_forced_turn_reason():
                         logger.info(f"{self._runtime.log_prefix} {force_continue_reason}")
                     planner_no_tool_count = 0
+                    planner_auth_reject_count = 0
                     mid_term_reference_refreshed = False
                     round_index = 0
                     while round_index < self._runtime._max_internal_rounds:
@@ -1031,6 +1075,64 @@ class MaisakaReasoningEngine:
                             #     f"回合={round_index + 1} "
                             #     f"耗时={cycle_detail.time_records['planner']:.3f} 秒"
                             # )
+                            # 鉴权：在提交历史与执行工具之前检查 Planner 输出是否存在身份混淆
+                            if state.response is not None:
+                                auth_decision = await self._check_planner_auth(state.response)
+                                # 通过（含异常放行）也广播鉴权结果事件，供麦麦观察展示鉴权卡片
+                                if auth_decision is not None and auth_decision.passed and global_config.auth.emit_passed_events:
+                                    await emit_auth_result(
+                                        session_id=self._runtime.session_id,
+                                        cycle_id=cycle_detail.cycle_id,
+                                        stage="planner",
+                                        passed=True,
+                                        audit_error=auth_decision.audit_error,
+                                        identity_check=auth_decision.identity_check,
+                                    )
+                                if auth_decision is not None and not auth_decision.passed:
+                                    planner_auth_reject_count += 1
+                                    self._inject_planner_auth_feedback(state.response, auth_decision)
+                                    max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
+                                    auth_is_final = planner_auth_reject_count > max_auth_retries
+                                    await emit_auth_result(
+                                        session_id=self._runtime.session_id,
+                                        cycle_id=cycle_detail.cycle_id,
+                                        stage="planner",
+                                        passed=False,
+                                        attempt=planner_auth_reject_count,
+                                        max_retries=max_auth_retries,
+                                        final=auth_is_final,
+                                        reason=auth_decision.reason,
+                                        issues=[
+                                            {"issue_type": issue.issue_type, "detail": issue.detail}
+                                            for issue in auth_decision.issues
+                                        ],
+                                        rejected_text=" ".join(
+                                            self._get_planner_content(state.response).split()
+                                        )[:300],
+                                        identity_check=auth_decision.identity_check,
+                                    )
+                                    if not auth_is_final:
+                                        logger.warning(
+                                            f"{self._runtime.log_prefix} Planner 输出被鉴权驳回，重新规划: "
+                                            f"次数={planner_auth_reject_count}/{max_auth_retries} "
+                                            f"原因={auth_decision.reason!r}"
+                                        )
+                                        state.cycle_end = CycleEnd(
+                                            "auth_retry",
+                                            f"Planner 输出未通过身份核对（{auth_decision.reason}），"
+                                            f"驳回后重新规划（第 {planner_auth_reject_count} 次）。",
+                                        )
+                                        continue
+                                    logger.warning(
+                                        f"{self._runtime.log_prefix} Planner 输出连续被鉴权驳回，放弃本轮: "
+                                        f"次数={planner_auth_reject_count} 原因={auth_decision.reason!r}"
+                                    )
+                                    state.cycle_end = CycleEnd(
+                                        "auth_rejected",
+                                        f"Planner 输出连续未通过身份核对（{auth_decision.reason}），已放弃本轮。",
+                                    )
+                                    self._runtime._enter_stop_state()
+                                    break
                             planner_no_tool_count, should_break_after_action = await self._handle_planner_response_actions(
                                 response=state.response,
                                 cycle_detail=cycle_detail,

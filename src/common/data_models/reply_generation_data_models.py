@@ -134,6 +134,10 @@ class ReplyGenerationResult(BaseDataModel):
         default_factory=list,
         metadata={"description": "本次 replyer 的预览用瘦身请求消息列表。"},
     )
+    auth_rejected: bool = field(
+        default=False,
+        metadata={"description": "回复是否因鉴权连续驳回而放弃发送。"},
+    )
 
 def _format_selected_expression_line(expression: Dict[str, Any], fallback_id: Optional[int] = None) -> str:
     """格式化单条已选表达方式，供终端与监控详情展示。"""

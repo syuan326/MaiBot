@@ -27,6 +27,9 @@ from src.maisaka.context.clear_context import (
     is_clear_context_command,
     mark_clear_context_command,
 )
+from src.maisaka.auth.input_guard import input_guard
+from src.maisaka.auth.new_user_guide import new_user_guide
+from src.maisaka.auth.user_permission import user_permission_resolver
 
 from .chat_manager import chat_manager
 from .image_receive_compressor import process_received_images_in_message
@@ -748,6 +751,56 @@ class ChatBot:
                 logger.info(f"[{chat_name}]{user_info.user_nickname}:{text}")
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
+
+            # 用户权限：黑名单用户直接拦截
+            if global_config.auth.permissions:
+                user_permission = user_permission_resolver.resolve(platform, str(user_info.user_id or ""))
+                if user_permission.is_blacklisted():
+                    chat_name = group_info.group_name if group_info else "私聊"
+                    logger.warning(
+                        f"[黑名单拦截][{chat_name}]{user_info.user_nickname}:{text} "
+                        f"角色={user_permission.role_label()}"
+                    )
+                    return
+
+            # 新用户识别：陌生新成员记录引导，供 Planner 注入"先认识再深聊"
+            if global_config.auth.enable_new_user_guide:
+                await new_user_guide.check_and_record(
+                    platform=platform,
+                    user_id=str(user_info.user_id or ""),
+                    user_name=str(user_info.user_cardname or user_info.user_nickname or ""),
+                )
+
+            # 输入注入检测：规则→LLM 双通道，按动作策略处理
+            if global_config.auth.enable_input_detection:
+                injection_event = await input_guard.check_inbound_message(
+                    platform=platform,
+                    user_id=str(user_info.user_id or ""),
+                    group_id=str(group_info.group_id) if group_info else None,
+                    text=text,
+                    message=message,
+                    user_name=str(user_info.user_cardname or user_info.user_nickname or ""),
+                )
+                if injection_event is not None:
+                    action = str(global_config.auth.input_detection_action or "warn_context").strip()
+                    chat_name = group_info.group_name if group_info else "私聊"
+                    if action == "delete":
+                        logger.warning(
+                            f"[输入注入拦截][{chat_name}]{user_info.user_nickname}:{text} "
+                            f"类别={injection_event.categories} 命中={injection_event.hit_count}"
+                        )
+                        return
+                    if action == "warn_context":
+                        input_guard.attach_warning_to_session(injection_event)
+                        logger.warning(
+                            f"[输入注入检测][{chat_name}]{user_info.user_nickname}:{text} "
+                            f"类别={injection_event.categories} 命中={injection_event.hit_count}，已注入安全警告"
+                        )
+                    else:
+                        logger.warning(
+                            f"[输入注入检测][{chat_name}]{user_info.user_nickname}:{text} "
+                            f"类别={injection_event.categories} 命中={injection_event.hit_count}，仅记录"
+                        )
 
             chat_manager.register_message(message)
 

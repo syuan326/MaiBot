@@ -44,7 +44,11 @@ from src.maisaka.context.messages import (
 from src.maisaka.context.planner_messages import extract_quote_ids_from_message_sequence
 from src.maisaka.display.prompt_cli_renderer import PromptCLIVisualizer
 from src.maisaka.memory.mid_term import is_mid_term_memory_message
+from src.maisaka.monitor.events import emit_auth_result
 from src.maisaka.visual.message_limiter import limit_latest_images_in_messages
+from src.maisaka.auth import authenticator
+from src.maisaka.auth.decision import AuthDecision
+from src.maisaka.auth.feedback import build_replyer_auth_reject_reason
 from src.plugin_runtime.hook_payloads import deserialize_prompt_messages, serialize_prompt_messages
 
 from .maisaka_expression_selector import maisaka_expression_selector
@@ -840,6 +844,27 @@ class BaseMaisakaReplyGenerator:
 
         return get_plugin_runtime_manager()
 
+    async def _check_replyer_auth(
+        self,
+        *,
+        response_text: str,
+        reply_message: Optional[SessionMessage],
+        filtered_history: List[LLMContextMessage],
+        session_id: str,
+    ) -> Optional[AuthDecision]:
+        """对回复文本执行鉴权身份核对；未启用或无内容可检时返回 None。"""
+
+        if not global_config.auth.enabled or not global_config.auth.check_replyer:
+            return None
+        if not response_text.strip():
+            return None
+        return await authenticator.check_replyer_output(
+            reply_text=response_text,
+            reply_message=reply_message,
+            chat_history=filtered_history,
+            session_id=session_id,
+        )
+
     async def _build_reply_context(
         self,
         chat_history: List[LLMContextMessage],
@@ -979,6 +1004,7 @@ class BaseMaisakaReplyGenerator:
         retry_events: List[Dict[str, Any]] = []
         hook_rewrite_events: List[Dict[str, str]] = []
         retry_count = 0
+        auth_retry_count = 0
         aggregate_prompt_tokens = 0
         aggregate_completion_tokens = 0
         aggregate_total_tokens = 0
@@ -1204,6 +1230,79 @@ class BaseMaisakaReplyGenerator:
                     f"pattern={matched_regex_pattern or 'unknown'} "
                     f"response={self._normalize_content(response_text, limit=300)!r}"
                 )
+
+            # 鉴权：检查回复是否存在用户身份混淆，必要时带约束重新生成
+            auth_decision = await self._check_replyer_auth(
+                response_text=response_text,
+                reply_message=reply_message,
+                filtered_history=filtered_history,
+                session_id=preview_chat_id,
+            )
+            # 通过（含异常放行）也广播鉴权结果事件，供麦麦观察展示鉴权卡片
+            if auth_decision is not None and auth_decision.passed and global_config.auth.emit_passed_events:
+                await emit_auth_result(
+                    session_id=preview_chat_id,
+                    stage="replyer",
+                    passed=True,
+                    audit_error=auth_decision.audit_error,
+                    identity_check=auth_decision.identity_check,
+                )
+            if auth_decision is not None and not auth_decision.passed:
+                auth_retry_count += 1
+                max_auth_retries = max(0, int(global_config.auth.max_auth_retries))
+                reject_reason = build_replyer_auth_reject_reason(auth_decision)
+                auth_is_final = auth_retry_count > max_auth_retries
+                await emit_auth_result(
+                    session_id=preview_chat_id,
+                    stage="replyer",
+                    passed=False,
+                    attempt=auth_retry_count,
+                    max_retries=max_auth_retries,
+                    final=auth_is_final,
+                    reason=auth_decision.reason,
+                    issues=[
+                        {"issue_type": issue.issue_type, "detail": issue.detail}
+                        for issue in auth_decision.issues
+                    ],
+                    rejected_text=" ".join(response_text.split())[:300],
+                    identity_check=auth_decision.identity_check,
+                )
+                if not auth_is_final:
+                    retry_events.append(
+                        {
+                            "attempt": retry_count + 1,
+                            "source": "auth",
+                            "retry_reason": reject_reason,
+                            "rejected_response": response_text,
+                        }
+                    )
+                    retry_reasons.append(f"鉴权驳回: {reject_reason}")
+                    retry_constraint = self._build_retry_constraint_sentence(reject_reason, response_text)
+                    if retry_constraint:
+                        retry_constraints.append(retry_constraint)
+                    retry_count += 1
+                    logger.warning(
+                        "Maisaka 回复器输出被鉴权驳回，重新生成: "
+                        f"session={preview_chat_id} auth_retry={auth_retry_count}/{max_auth_retries} "
+                        f"reason={reject_reason} "
+                        f"rejected={self._normalize_content(response_text, limit=300)!r}"
+                    )
+                    continue
+                logger.warning(
+                    "Maisaka 回复器输出连续被鉴权驳回，放弃发送: "
+                    f"session={preview_chat_id} auth_retry={auth_retry_count} "
+                    f"reason={reject_reason} "
+                    f"rejected={self._normalize_content(response_text, limit=300)!r}"
+                )
+                result.auth_rejected = True
+                result.error_message = f"鉴权驳回，放弃发送: {reject_reason}"
+                result.metrics = GenerationMetrics(
+                    prompt_ms=prompt_ms,
+                    llm_ms=llm_ms,
+                    overall_ms=round((time.perf_counter() - overall_started_at) * 1000, 2),
+                )
+                result.metrics.extra["replyer_auth_retry_count"] = auth_retry_count
+                return finalize(False)
             break
 
         result.success = bool(response_text)

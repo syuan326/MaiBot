@@ -916,6 +916,407 @@ class ChatConfig(ConfigBase):
     """如何回复、引用回复与聊天 Prompt 配置。"""
 
 
+class AuthIdentityRuleConfig(ConfigBase):
+    """鉴权固定身份规则：将指定用户（平台+用户ID）绑定为固定身份，由鉴权器做UID硬比对，按群动态核对称呼"""
+
+    platform: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "平台",
+                "en_US": "Platform",
+                "ja_JP": "プラットフォーム",
+            },
+            "x-widget": "input",
+            "x-icon": "layers",
+        },
+    )
+    """用户所在平台，例如 qq。"""
+
+    user_id: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "用户ID",
+                "en_US": "User ID",
+                "ja_JP": "ユーザーID",
+            },
+            "x-widget": "input",
+            "x-icon": "user",
+        },
+    )
+    """绑定用户在该平台上的账号ID；名字无需配置，鉴权时会按此ID自动查询已知昵称和各群群名片。"""
+
+    aliases: list[str] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "专属称呼（可选）",
+                "en_US": "Exclusive aliases (optional)",
+                "ja_JP": "専用呼称（任意）",
+            },
+            "x-widget": "custom",
+            "x-icon": "tags",
+        },
+    )
+    """可选。跨群专属称呼，例如 哥哥；这些称呼仅属于该用户，禁止用于其他任何人。不配置时，鉴权器也会按此ID自动查询该用户在各群的已知名字，按当前群动态核对称呼。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        if not self.platform.strip():
+            raise ValueError("鉴权固定身份规则必须包含platform")
+        if not self.user_id.strip():
+            raise ValueError("鉴权固定身份规则必须包含user_id")
+        return super().model_post_init(context)
+
+
+class AuthPermissionConfig(ConfigBase):
+    """用户权限规则：按平台+用户ID绑定角色，用于黑名单拦截与鉴权审核的越权判断"""
+
+    platform: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "平台",
+                "en_US": "Platform",
+                "ja_JP": "プラットフォーム",
+            },
+            "x-widget": "input",
+            "x-icon": "layers",
+        },
+    )
+    """用户所在平台，例如 qq。"""
+
+    user_id: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "用户ID",
+                "en_US": "User ID",
+                "ja_JP": "ユーザーID",
+            },
+            "x-widget": "input",
+            "x-icon": "user",
+        },
+    )
+    """绑定用户在该平台上的账号ID。"""
+
+    role: str = Field(
+        default="normal",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "角色",
+                "en_US": "Role",
+                "ja_JP": "ロール",
+            },
+            "x-widget": "select",
+            "x-icon": "user-shield",
+            "options": [
+                {
+                    "label": {"zh_CN": "黑名单", "en_US": "Blacklist", "ja_JP": "ブラックリスト"},
+                    "value": "blacklist",
+                },
+                {
+                    "label": {"zh_CN": "普通用户", "en_US": "Normal", "ja_JP": "一般ユーザー"},
+                    "value": "normal",
+                },
+                {
+                    "label": {"zh_CN": "信任用户", "en_US": "Trusted", "ja_JP": "信頼ユーザー"},
+                    "value": "trusted",
+                },
+                {
+                    "label": {"zh_CN": "管理员", "en_US": "Admin", "ja_JP": "管理者"},
+                    "value": "admin",
+                },
+                {
+                    "label": {"zh_CN": "拥有者", "en_US": "Owner", "ja_JP": "オーナー"},
+                    "value": "owner",
+                },
+            ],
+        },
+    )
+    """角色：blacklist（黑名单，消息被直接丢弃）/ normal（普通）/ trusted（信任）/ admin（管理员）/ owner（拥有者）。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        if not self.platform.strip():
+            raise ValueError("用户权限规则必须包含platform")
+        if not self.user_id.strip():
+            raise ValueError("用户权限规则必须包含user_id")
+        return super().model_post_init(context)
+
+
+class AuthConfig(ConfigBase):
+    """鉴权配置类"""
+
+    __ui_label__ = "鉴权"
+    __ui_order__ = 30
+
+    enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "启用鉴权器",
+                "en_US": "Enable authenticator",
+                "ja_JP": "認証器を有効化",
+            },
+            "x-widget": "switch",
+            "x-icon": "shield-check",
+        },
+    )
+    """开启后，鉴权器会对 Planner 决策和 Replyer 回复做身份核对，防止麦麦认错用户；每次检查会额外调用一次模型。"""
+
+    check_planner: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "检查 Planner 输出",
+                "en_US": "Check planner output",
+                "ja_JP": "Planner 出力をチェック",
+            },
+            "x-widget": "switch",
+            "x-icon": "map",
+        },
+    )
+    """检查 Planner 的思考和工具调用是否存在用户身份混淆；不通过时驳回并让其重新规划。"""
+
+    check_replyer: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "检查 Replyer 输出",
+                "en_US": "Check replyer output",
+                "ja_JP": "Replyer 出力をチェック",
+            },
+            "x-widget": "switch",
+            "x-icon": "message-square",
+        },
+    )
+    """检查待发送的回复是否存在用户身份混淆；不通过时让 Replyer 重新生成。"""
+
+    max_auth_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "鉴权重试次数",
+                "en_US": "Auth retry count",
+                "ja_JP": "認証リトライ回数",
+            },
+            "x-widget": "input",
+            "x-icon": "rotate-cw",
+        },
+    )
+    """输出被鉴权驳回后最多重新规划/重新生成几次；重试耗尽后放弃本轮，不发送任何内容。"""
+
+    history_message_limit: int = Field(
+        default=20,
+        ge=5,
+        le=100,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "鉴权参考消息数",
+                "en_US": "Auth history message limit",
+                "ja_JP": "認証参照メッセージ数",
+            },
+            "x-widget": "input",
+            "x-icon": "layers",
+            "advanced": True,
+        },
+    )
+    """鉴权审核时提供给审核模型的最近聊天消息条数。"""
+
+    identity_rules: list[AuthIdentityRuleConfig] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "固定身份规则",
+                "en_US": "Fixed identity rules",
+                "ja_JP": "固定アイデンティティルール",
+            },
+            "x-widget": "custom",
+            "x-icon": "shield-check",
+            "advanced": True,
+        },
+    )
+    """将指定用户（平台+用户ID）绑定为固定身份（例如某用户是唯一的哥哥）；鉴权器会做UID硬比对，专属称呼与各群群名片按群动态核对称呼，称呼用于他人时驳回。"""
+
+    emit_passed_events: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "产生鉴权通过事件",
+                "en_US": "Emit auth passed events",
+                "ja_JP": "認証通過イベントを発行",
+            },
+            "x-widget": "switch",
+            "x-icon": "activity",
+            "advanced": True,
+        },
+    )
+    """开启后麦麦观察会显示鉴权通过的卡片；关闭后只产生鉴权驳回事件，减少事件量。"""
+
+    enable_input_detection: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "启用输入注入检测",
+                "en_US": "Enable input injection detection",
+                "ja_JP": "入力インジェクション検出を有効化",
+            },
+            "x-widget": "switch",
+            "x-icon": "shield-alert",
+        },
+    )
+    """开启后对入站消息做提示词注入（越狱/破甲）检测，防止用户通过注入指令操控麦麦；规则通道零成本，LLM 确认按需触发。"""
+
+    input_detection_mode: str = Field(
+        default="rule_then_llm",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "输入检测模式",
+                "en_US": "Input detection mode",
+                "ja_JP": "入力検出モード",
+            },
+            "x-widget": "select",
+            "x-icon": "sliders-horizontal",
+            "options": [
+                {
+                    "label": {"zh_CN": "规则命中后 LLM 确认", "en_US": "Rule then LLM confirm", "ja_JP": "ルール命中後にLLM確認"},
+                    "value": "rule_then_llm",
+                },
+                {
+                    "label": {"zh_CN": "仅规则", "en_US": "Rule only", "ja_JP": "ルールのみ"},
+                    "value": "rule_only",
+                },
+                {
+                    "label": {"zh_CN": "仅 LLM", "en_US": "LLM only", "ja_JP": "LLMのみ"},
+                    "value": "llm_only",
+                },
+            ],
+        },
+    )
+    """检测模式：仅规则零成本但误报较高；规则命中后 LLM 确认（推荐）可结合上下文降低误报；仅 LLM 每次消息都额外调用模型。"""
+
+    input_detection_action: str = Field(
+        default="warn_context",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "输入检测动作",
+                "en_US": "Input detection action",
+                "ja_JP": "入力検出アクション",
+            },
+            "x-widget": "select",
+            "x-icon": "zap",
+            "options": [
+                {
+                    "label": {"zh_CN": "注入安全警告（推荐）", "en_US": "Inject safety warning (recommended)", "ja_JP": "安全警告を注入（推奨）"},
+                    "value": "warn_context",
+                },
+                {
+                    "label": {"zh_CN": "直接丢弃消息", "en_US": "Delete message", "ja_JP": "メッセージを破棄"},
+                    "value": "delete",
+                },
+                {
+                    "label": {"zh_CN": "仅记录", "en_US": "Detect only", "ja_JP": "記録のみ"},
+                    "value": "detect_only",
+                },
+            ],
+        },
+    )
+    """确认注入后的处理动作：注入安全警告让麦麦忽略注入指令；直接丢弃消息；或仅记录日志与事件。"""
+
+    custom_input_keywords: list[str] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "自定义注入关键词",
+                "en_US": "Custom injection keywords",
+                "ja_JP": "カスタムインジェクションキーワード",
+            },
+            "x-widget": "custom",
+            "x-icon": "key",
+            "advanced": True,
+        },
+    )
+    """在预设注入规则之外追加的自定义关键词（子串匹配，不区分大小写）。"""
+
+    custom_input_patterns: list[str] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "自定义注入正则",
+                "en_US": "Custom injection patterns",
+                "ja_JP": "カスタムインジェクション正規表現",
+            },
+            "x-widget": "custom",
+            "x-icon": "regex",
+            "advanced": True,
+        },
+    )
+    """在预设注入规则之外追加的自定义正则表达式；非法的正则会自动跳过并记录警告。"""
+
+    permissions: list[AuthPermissionConfig] = Field(
+        default_factory=lambda: [],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "用户权限规则",
+                "en_US": "User permission rules",
+                "ja_JP": "ユーザー権限ルール",
+            },
+            "x-widget": "custom",
+            "x-icon": "user-shield",
+        },
+    )
+    """按平台+用户ID为用户绑定角色：owner（拥有者）/ admin（管理员）/ trusted（信任）/ normal（普通）/ blacklist（黑名单）；黑名单用户消息被直接丢弃，角色信息会注入鉴权审核供越权判断。"""
+
+    enable_new_user_guide: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "新用户识别引导",
+                "en_US": "New user guide",
+                "ja_JP": "新規ユーザーガイド",
+            },
+            "x-widget": "switch",
+            "x-icon": "user-plus",
+        },
+    )
+    """开启后识别陌生新成员（尚未被麦麦认识），向 Planner 注入引导，提醒先认识再深聊，避免把陌生人当老朋友；同一用户短时间只提示一次。"""
+
+    enable_break_guard: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "输出破甲检测",
+                "en_US": "Output break guard",
+                "ja_JP": "出力脱獄ガード",
+            },
+            "x-widget": "switch",
+            "x-icon": "shield-x",
+        },
+    )
+    """开启后在 Planner/Replyer 审核中同时检查"被破甲"迹象（泄露系统提示词、违反人格设定、输出敏感违规内容、向他人传播注入指令）；与身份核对共用同一次审核调用，不额外增加模型开销。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """验证配置"""
+        for rule in self.identity_rules:
+            if not isinstance(rule, AuthIdentityRuleConfig):
+                raise ValueError(f"固定身份规则必须是AuthIdentityRuleConfig类型，而不是{type(rule).__name__}")
+        for rule in self.permissions:
+            if not isinstance(rule, AuthPermissionConfig):
+                raise ValueError(f"用户权限规则必须是AuthPermissionConfig类型，而不是{type(rule).__name__}")
+            if rule.role not in {"owner", "admin", "trusted", "normal", "blacklist"}:
+                raise ValueError(
+                    f"用户权限角色非法: {rule.role!r}，可选值: owner / admin / trusted / normal / blacklist"
+                )
+        if self.input_detection_mode not in {"rule_only", "rule_then_llm", "llm_only"}:
+            raise ValueError(f"输入检测模式非法: {self.input_detection_mode!r}，可选值: rule_only / rule_then_llm / llm_only")
+        if self.input_detection_action not in {"delete", "warn_context", "detect_only"}:
+            raise ValueError(f"输入检测动作非法: {self.input_detection_action!r}，可选值: delete / warn_context / detect_only")
+        return super().model_post_init(context)
+
 class AttentionDriftConfig(ConfigBase):
     """注意力漂移实验功能配置。"""
 

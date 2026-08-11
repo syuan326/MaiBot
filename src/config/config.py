@@ -25,6 +25,7 @@ from .legacy_migration import (
 from .model_configs import APIProvider, ModelInfo, ModelTaskConfig
 from .official_configs import (
     AMemorixConfig,
+    AuthConfig,
     BotConfig,
     ChatConfig,
     ChineseTypoConfig,
@@ -66,7 +67,7 @@ MODEL_CONFIG_PATH: Path = (CONFIG_DIR / "model_config.toml").resolve().absolute(
 LEGACY_ENV_PATH: Path = (PROJECT_ROOT / ".env").resolve().absolute()
 A_MEMORIX_LEGACY_CONFIG_PATH: Path = (CONFIG_DIR / "a_memorix.toml").resolve().absolute()
 MMC_VERSION: str = read_project_version(PROJECT_ROOT)
-CONFIG_VERSION: str = "8.14.34"
+CONFIG_VERSION: str = "8.19.0"
 MODEL_CONFIG_VERSION: str = "1.17.6"
 
 logger = get_logger("config")
@@ -104,6 +105,9 @@ class Config(ConfigBase):
 
     message_receive: MessageReceiveConfig = Field(default_factory=MessageReceiveConfig)
     """消息接收配置类"""
+
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    """鉴权配置类"""
 
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     """语音配置类"""
