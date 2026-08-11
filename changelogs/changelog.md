@@ -15,6 +15,7 @@
 - 鉴权审核注入参与者权限上下文，供审核模型判断 Planner 决策与 Replyer 回复是否存在越权倾向（如黑名单用户不应被正常对待）。
 - 新增新用户识别引导：识别陌生新成员并向 Planner 注入提醒，先认识再深聊；同一用户短时间只提示一次。
 - 新增输出破甲检测：Planner/Replyer 审核同时检查被越狱/注入迹象（泄露系统提示词、违反人格设定、输出敏感违规内容、向他人传播注入指令），与身份核对共用同一次审核调用，不额外增加模型开销；新增 prompt_leak / personality_violation / content_violation / injection_propagation 驳回类型。
+- 内置输入注入检测后，与第三方插件 small_sunshine_prompt-injection-guard 功能重叠，可关闭该插件避免重复检测。
 
 # [1.1.4] - 2026-8-2
 
