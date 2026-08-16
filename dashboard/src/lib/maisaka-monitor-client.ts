@@ -283,6 +283,36 @@ export interface ReplierResponseEvent {
   timestamp: number
 }
 
+export interface AuthResultEvent {
+  session_id: string
+  cycle_id?: number | null
+  stage: 'planner' | 'replyer' | string
+  passed: boolean
+  audit_error: boolean
+  attempt: number
+  max_retries: number
+  final: boolean
+  reason: string
+  issues: { issue_type: string; detail: string }[]
+  rejected_text: string
+  identity_check?: Record<string, unknown> | null
+  error?: string
+  timestamp: number
+}
+
+export interface AuthInputInjectionEvent {
+  session_id: string
+  msg_id: string
+  user_id: string
+  user_name: string
+  text: string
+  categories: string[]
+  hit_count: number
+  confirm_method: 'rule' | 'llm' | 'rule_then_llm' | string
+  reason: string
+  timestamp: number
+}
+
 // ─── 统一事件联合类型 ─────────────────────────────────────────
 
 export type MaisakaMonitorEvent =
@@ -302,6 +332,8 @@ export type MaisakaMonitorEvent =
   | { type: 'tool.execution'; data: ToolExecutionEvent }
   | { type: 'replier.request'; data: ReplierRequestEvent }
   | { type: 'replier.response'; data: ReplierResponseEvent }
+  | { type: 'auth.result'; data: AuthResultEvent }
+  | { type: 'auth.input_injection'; data: AuthInputInjectionEvent }
 
 export type MaisakaEventListener = (event: MaisakaMonitorEvent) => void
 

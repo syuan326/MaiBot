@@ -31,6 +31,9 @@ class AuthDecision:
     audit_error: bool = False
     """审核模型调用异常后放行（fail-open）时为 True，用于与真正的审核通过区分。"""
 
+    audit_error_text: str = ""
+    """审核模型调用异常的具体原因（异常类型与消息）；无异常时为空串。"""
+
     identity_check: Optional[Dict[str, Any]] = None
     """固定身份 UID 核查的结构化结果（发送者、是否目标用户、相关称呼等）；未配置规则时为 None。"""
 

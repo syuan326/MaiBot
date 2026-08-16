@@ -736,6 +736,14 @@ export function useMaisakaMonitor() {
     cachedSessions = new Map()
     cachedStageStatuses = new Map()
     cachedSelectedSession = null
+    // 重置事件游标：否则刷新后订阅仍从旧游标续播，历史事件永远不会回放
+    cachedLastEventId = 0
+    cachedSeenEventIds = new Set()
+    try {
+      window.localStorage.removeItem(LAST_EVENT_ID_STORAGE_KEY)
+    } catch (error) {
+      console.warn('清除 MaiSaka 观察事件游标失败，已忽略:', error)
+    }
     setTimeline([])
     setSessions(new Map())
     setStageStatuses(new Map())

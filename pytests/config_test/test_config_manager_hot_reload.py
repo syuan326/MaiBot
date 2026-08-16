@@ -5,6 +5,7 @@ from watchfiles import Change
 import asyncio
 import pytest
 
+from src.common.i18n import use_locale
 from src.config.config import ConfigManager
 from src.config.file_watcher import FileChange, FileWatcherStats
 
@@ -44,7 +45,9 @@ async def test_handle_file_changes_timeout_logged(caplog):
     changes = [FileChange(change_type=Change.modified, path=Path("/tmp/model_config.toml"))]
 
     with caplog.at_level("ERROR"):
-        await manager._handle_file_changes(changes)
+        # 日志文案已 i18n 化，钉住 zh-CN 避免受宿主机系统 locale 影响
+        with use_locale("zh-CN"):
+            await manager._handle_file_changes(changes)
 
     assert "配置热重载超时" in caplog.text
 

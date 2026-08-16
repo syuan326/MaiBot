@@ -137,3 +137,18 @@ description = "Advanced memory retrieval prompt header used by the ReAct-style m
 display_name = "WebUI AI Search"
 advanced = true
 description = "Selects relevant results from real WebUI page and configuration candidates based on natural-language intent."
+
+[auth_input_check]
+display_name = "Input Injection Audit"
+advanced = true
+description = "Input-side security audit prompt that decides whether a user message is a prompt injection attack (jailbreak)."
+
+[auth_planner_check]
+display_name = "Planner Output Audit"
+advanced = true
+description = "Output-side auth audit prompt that checks Planner decisions for user identity confusion or jailbreak/injection signs."
+
+[auth_replyer_check]
+display_name = "Replyer Output Audit"
+advanced = true
+description = "Output-side auth audit prompt that checks outgoing replies for user identity confusion or jailbreak/injection signs."

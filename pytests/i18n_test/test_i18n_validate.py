@@ -5,12 +5,21 @@ from pathlib import Path
 
 import json
 
+import pytest
+
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "i18n_validate.py"
 MODULE_SPEC = spec_from_file_location("i18n_validate_script", SCRIPT_PATH)
 assert MODULE_SPEC is not None
 assert MODULE_SPEC.loader is not None
 I18N_VALIDATE = module_from_spec(MODULE_SPEC)
 MODULE_SPEC.loader.exec_module(I18N_VALIDATE)
+
+
+@pytest.fixture(autouse=True)
+def _pin_default_locale(monkeypatch: pytest.MonkeyPatch) -> None:
+    """脚本的 source locale 默认取自宿主机系统 locale，钉住 zh-CN 保证测试确定性。"""
+
+    monkeypatch.setattr(I18N_VALIDATE, "DEFAULT_LOCALE", "zh-CN")
 
 
 def write_locale_file(locales_root: Path, locale: str, file_name: str, payload: dict[str, object]) -> None:

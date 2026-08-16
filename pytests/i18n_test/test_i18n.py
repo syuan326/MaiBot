@@ -22,7 +22,8 @@ def test_t_falls_back_to_default_locale(tmp_path: Path) -> None:
     write_locale_file(locales_root, "zh-CN", "core.json", {"greeting": "你好，{name}"})
     write_locale_file(locales_root, "en-US", "core.json", {})
 
-    manager = I18nManager(locales_root=locales_root)
+    # 显式钉住默认 locale，避免受宿主机系统 locale 影响
+    manager = I18nManager(default_locale="zh-CN", locales_root=locales_root)
 
     assert manager.t("greeting", locale="en-US", name="Mai") == "你好，Mai"
 

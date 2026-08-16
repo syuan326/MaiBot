@@ -1026,18 +1026,21 @@ async def test_browser_start_blocks_private_network_address() -> None:
     await manager.shutdown()
 
 
-def test_experimental_browser_is_disabled_by_default() -> None:
+def test_experimental_browser_uses_conservative_defaults() -> None:
+    # 实验性联网能力已移除 enabled 开关，仅保留暂未开放的参数面
     config = ExperimentalConfig()
 
-    assert config.browser.enabled is False
+    assert config.browser.session_timeout_seconds == 300
+    assert config.browser.navigation_timeout_seconds == 30
+    assert config.browser.max_page_text_length == 6000
     assert config.browser.max_actions == 20
 
 
-def test_experimental_browser_switch_is_exposed_in_config_schema() -> None:
+def test_experimental_browser_section_is_exposed_in_config_schema() -> None:
     schema = ConfigSchemaGenerator.generate_schema(Config)
     browser_schema = schema["nested"]["experimental"]["nested"]["browser"]
-    enabled_field = next(field for field in browser_schema["fields"] if field["name"] == "enabled")
+    timeout_field = next(field for field in browser_schema["fields"] if field["name"] == "session_timeout_seconds")
 
     assert browser_schema["uiLabel"] == "网页浏览"
-    assert enabled_field["label"]["zh_CN"] == "启用网页浏览"
-    assert enabled_field["x-widget"] == "switch"
+    assert timeout_field["label"]["zh_CN"] == "浏览会话超时秒数"
+    assert timeout_field["x-widget"] == "number"

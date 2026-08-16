@@ -57,6 +57,7 @@ const expectedPaths = [
   '/logs',
   '/reasoning-process',
   '/planner-monitor',
+  '/auth-monitor',
   '/chat-management',
   '/chat',
   '/settings',

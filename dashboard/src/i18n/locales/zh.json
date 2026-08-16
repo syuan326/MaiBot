@@ -52,6 +52,7 @@
       "logViewer": "日志查看器",
       "reasoningProcess": "推理过程",
       "maisakaMonitor": "麦麦观察",
+      "maisakaAuthMonitor": "麦麦视察",
       "chatManagement": "聊天管理",
       "localChat": "本地聊天室",
       "settings": "WEBUI设置"

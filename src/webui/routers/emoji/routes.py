@@ -839,10 +839,14 @@ async def upload_emoji(
         verify_auth_token(maibot_session)
 
         if not file.content_type:
+            logger.warning(f"表情包上传被拒绝: 无法识别文件类型 (filename={file.filename!r})")
             raise HTTPException(status_code=400, detail="无法识别文件类型")
 
         allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
         if file.content_type not in allowed_types:
+            logger.warning(
+                f"表情包上传被拒绝: 不支持的文件类型 {file.content_type!r} (filename={file.filename!r})"
+            )
             raise HTTPException(
                 status_code=400,
                 detail=f"不支持的文件类型: {file.content_type}，支持: {', '.join(allowed_types)}",
@@ -850,12 +854,17 @@ async def upload_emoji(
 
         file_content = await file.read()
         if not file_content:
+            logger.warning(f"表情包上传被拒绝: 文件内容为空 (filename={file.filename!r})")
             raise HTTPException(status_code=400, detail="文件内容为空")
 
         try:
             with Image.open(io.BytesIO(file_content)) as img:
                 img.verify()
         except Exception as e:
+            logger.warning(
+                f"表情包上传被拒绝: 无效的图片文件 (filename={file.filename!r}, "
+                f"size={len(file_content)}B, err={e})"
+            )
             raise HTTPException(status_code=400, detail=f"无效的图片文件: {str(e)}") from e
 
         with Image.open(io.BytesIO(file_content)) as img:

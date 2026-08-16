@@ -132,3 +132,18 @@ description = "用于在上下文裁切时，将被移出的聊天记录概括�
 display_name = "WebUI AI 搜索"
 advanced = true
 description = "用于根据自然语言意图从 WebUI 提供的真实页面与配置候选中选择搜索结果。"
+
+[auth_input_check]
+display_name = "输入注入审核"
+advanced = true
+description = "输入侧安全审核模板，用于判断用户消息是否构成提示词注入攻击（越狱/破甲）。"
+
+[auth_planner_check]
+display_name = "规划器输出审核"
+advanced = true
+description = "输出链路鉴权模板，用于核对 Planner 决策内容是否存在用户身份混淆或越狱/注入迹象。"
+
+[auth_replyer_check]
+display_name = "回复器输出审核"
+advanced = true
+description = "输出链路鉴权模板，用于核对即将发送的回复是否存在用户身份混淆或越狱/注入迹象。"

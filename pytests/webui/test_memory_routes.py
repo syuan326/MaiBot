@@ -641,6 +641,7 @@ def test_webui_memory_timeline_returns_chat_scoped_events(client: TestClient, mo
             group_name="测试群",
             user_cardname=None,
             user_nickname=None,
+            account_id=None,
         )
         if chat_id == "chat-1"
         else None,
@@ -711,6 +712,7 @@ def test_webui_memory_timeline_filters_types_and_limit(client: TestClient, monke
             group_name="测试群",
             user_cardname=None,
             user_nickname=None,
+            account_id=None,
         ),
     )
     monkeypatch.setattr(memory_router_module, "_get_memory_metadata_store", lambda: _FakeMemoryMetadataStore())
@@ -764,6 +766,7 @@ def test_webui_memory_timeline_deleted_paragraph_prefers_delete_operation(client
             group_name="测试群",
             user_cardname=None,
             user_nickname=None,
+            account_id=None,
         ),
     )
     monkeypatch.setattr(memory_router_module, "_get_memory_metadata_store", lambda: store)
@@ -794,6 +797,7 @@ def test_webui_memory_timeline_uses_latest_message_snapshot(client: TestClient, 
             group_name=None,
             user_cardname=None,
             user_nickname=None,
+            account_id=None,
         ),
     )
     monkeypatch.setattr(memory_router_module, "_get_memory_metadata_store", lambda: _FakeMemoryMetadataStore())
@@ -848,6 +852,7 @@ def test_webui_memory_timeline_handles_json_bytes_zero_timestamp_and_batches_ite
             group_name="测试群",
             user_cardname=None,
             user_nickname=None,
+            account_id=None,
         ),
     )
     monkeypatch.setattr(memory_router_module, "_get_memory_metadata_store", lambda: store)

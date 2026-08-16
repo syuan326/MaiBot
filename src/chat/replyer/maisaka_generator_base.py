@@ -1246,6 +1246,7 @@ class BaseMaisakaReplyGenerator:
                     passed=True,
                     audit_error=auth_decision.audit_error,
                     identity_check=auth_decision.identity_check,
+                    error=auth_decision.audit_error_text,
                 )
             if auth_decision is not None and not auth_decision.passed:
                 auth_retry_count += 1
@@ -1266,6 +1267,7 @@ class BaseMaisakaReplyGenerator:
                     ],
                     rejected_text=" ".join(response_text.split())[:300],
                     identity_check=auth_decision.identity_check,
+                    error=auth_decision.audit_error_text,
                 )
                 if not auth_is_final:
                     retry_events.append(

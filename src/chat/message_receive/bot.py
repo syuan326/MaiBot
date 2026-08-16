@@ -734,6 +734,7 @@ class ChatBot:
 
             group_info = message.message_info.group_info
             user_info = message.message_info.user_info
+            platform = message.platform
 
             # 平台层的 @ 检测由底层 is_mentioned_bot_in_message 统一处理；此处不做用户名硬编码匹配
 
@@ -804,7 +805,6 @@ class ChatBot:
 
             chat_manager.register_message(message)
 
-            platform = message.platform
             user_id = user_info.user_id
             group_id = group_info.group_id if group_info else None
             _ = await chat_manager.get_or_create_session(

@@ -58,7 +58,8 @@ class DummyDBSession:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def exec(self, statement):
+    def exec(self, statement, *args, **kwargs):
+        # 兼容 SQLAlchemy exec(statement, params=...) 的完整签名
         return self
 
     def first(self):
@@ -140,6 +141,10 @@ def setup_mocks(monkeypatch):
     person_utils_mod = _stub_module("src.common.utils.utils_person")
     person_utils_mod.PersonUtils = DummyPersonUtils
 
+    # message.py 惰性导入 is_bot_self；打桩避免连带加载 src.chat 包及真实数据库模型
+    system_utils_mod = _stub_module("src.common.utils.system_utils")
+    system_utils_mod.is_bot_self = lambda platform, user_id: False
+
 
 def load_message_via_file(monkeypatch):
     setup_mocks(monkeypatch)
@@ -202,7 +207,8 @@ async def test_image(monkeypatch):
     msg.raw_message = MessageSequence(components=[])
     msg.raw_message.components = [ImageComponent(binary_hash="image_hash"), TextComponent("Hello, world!")]
     await msg.process()
-    assert msg.processed_plain_text == "[一张图片，网卡了加载不出来] Hello, world!"
+    # 图片识别走异步后台流程，desc 为空时 content 保持为空（占位由渲染层处理）
+    assert msg.processed_plain_text == " Hello, world!"
 
 
 @pytest.mark.asyncio
@@ -213,7 +219,8 @@ async def test_emoji(monkeypatch):
     msg.raw_message = MessageSequence(components=[])
     msg.raw_message.components = [EmojiComponent(binary_hash="emoji_hash"), TextComponent("Hello, world!")]
     await msg.process()
-    assert msg.processed_plain_text == "[一个表情，网卡了加载不出来] Hello, world!"
+    # 描述未就绪时回退到 "[表情包]" 占位
+    assert msg.processed_plain_text == "[表情包] Hello, world!"
 
 
 @pytest.mark.asyncio

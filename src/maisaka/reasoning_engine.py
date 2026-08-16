@@ -1087,6 +1087,7 @@ class MaisakaReasoningEngine:
                                         passed=True,
                                         audit_error=auth_decision.audit_error,
                                         identity_check=auth_decision.identity_check,
+                                        error=auth_decision.audit_error_text,
                                     )
                                 if auth_decision is not None and not auth_decision.passed:
                                     planner_auth_reject_count += 1
@@ -1110,6 +1111,7 @@ class MaisakaReasoningEngine:
                                             self._get_planner_content(state.response).split()
                                         )[:300],
                                         identity_check=auth_decision.identity_check,
+                                        error=auth_decision.audit_error_text,
                                     )
                                     if not auth_is_final:
                                         logger.warning(

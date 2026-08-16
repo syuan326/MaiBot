@@ -197,6 +197,13 @@ const plannerMonitorRoute = createRoute({
   component: lazyRouteComponent(() => import('./routes/monitor/index.tsx'), 'PlannerMonitorPage'),
 })
 
+// 鉴权日志监控（麦麦视察）路由
+const authMonitorRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/auth-monitor',
+  component: lazyRouteComponent(() => import('./routes/monitor/index.tsx'), 'AuthMonitorPage'),
+})
+
 // 本地聊天室路由
 const chatRoute = createRoute({
   getParentRoute: () => protectedRoute,
@@ -380,6 +387,7 @@ const routeTree = rootRoute.addChildren([
     logsRoute,
     reasoningProcessRoute,
     plannerMonitorRoute,
+    authMonitorRoute,
     chatManagementRoute,
     chatRoute,
     settingsRoute,

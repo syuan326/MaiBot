@@ -234,7 +234,8 @@ def test_install_plugin_preserves_manifest_declared_id(client: TestClient, monke
     response = client.post(
         "/api/webui/plugins/install",
         json={
-            "plugin_id": "market.plugin",
+            # 安装链路会严格校验请求 ID 与 manifest 声明 ID 一致
+            "plugin_id": "author.declared",
             "repository_url": "https://github.com/author/declared",
             "branch": "main",
         },
@@ -247,7 +248,44 @@ def test_install_plugin_preserves_manifest_declared_id(client: TestClient, monke
     assert manifest["id"] == "author.declared"
 
 
-def test_install_plugin_backfills_missing_manifest_id(client: TestClient, monkeypatch):
+def test_install_plugin_rejects_mismatched_manifest_id(client: TestClient, monkeypatch):
+    class FakeGitMirrorService:
+        async def clone_repository(self, **kwargs):
+            target_path = kwargs["target_path"]
+            target_path.mkdir(parents=True, exist_ok=True)
+            (target_path / "_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 2,
+                        "id": "author.other",
+                        "name": "Other Plugin",
+                        "version": "1.0.0",
+                        "author": {"name": "author"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return {"success": True}
+
+    monkeypatch.setattr(management_module, "get_git_mirror_service", lambda: FakeGitMirrorService())
+
+    response = client.post(
+        "/api/webui/plugins/install",
+        json={
+            "plugin_id": "market.plugin",
+            "repository_url": "https://github.com/author/declared",
+            "branch": "main",
+        },
+    )
+
+    # manifest 声明 ID 与请求 ID 不一致时拒绝安装，并清理已克隆目录
+    assert response.status_code == 400
+    assert "插件 ID 不匹配" in response.json()["detail"]
+    target_path, _ = support_module.get_plugin_candidate_paths("market.plugin")
+    assert not target_path.exists()
+
+
+def test_install_plugin_rejects_missing_manifest_id(client: TestClient, monkeypatch):
     class FakeGitMirrorService:
         async def clone_repository(self, **kwargs):
             target_path = kwargs["target_path"]
@@ -276,11 +314,11 @@ def test_install_plugin_backfills_missing_manifest_id(client: TestClient, monkey
         },
     )
 
-    assert response.status_code == 200
-    plugin_path = support_module.resolve_installed_plugin_path("market.legacy")
-    assert plugin_path is not None
-    manifest = json.loads((plugin_path / "_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["id"] == "market.legacy"
+    # manifest 缺少 id 属于无效插件，拒绝安装并清理已克隆目录
+    assert response.status_code == 400
+    assert "缺少必需字段: id" in response.json()["detail"]
+    target_path, _ = support_module.get_plugin_candidate_paths("market.legacy")
+    assert not target_path.exists()
 
 
 def test_install_plugin_cleans_config_only_residue(client: TestClient, monkeypatch):

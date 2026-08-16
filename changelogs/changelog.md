@@ -17,6 +17,17 @@
 - 新增输出破甲检测：Planner/Replyer 审核同时检查被越狱/注入迹象（泄露系统提示词、违反人格设定、输出敏感违规内容、向他人传播注入指令），与身份核对共用同一次审核调用，不额外增加模型开销；新增 prompt_leak / personality_violation / content_violation / injection_propagation 驳回类型。
 - 内置输入注入检测后，与第三方插件 small_sunshine_prompt-injection-guard 功能重叠，可关闭该插件避免重复检测。
 
+## Webui
+
+- 新增「麦麦视察」页面：实时展示鉴权组件日志（Planner/Replyer 身份核对结果与输入注入检测命中），支持通过/驳回/注入统计、全部/仅异常/仅通过筛选、清空与回底。
+
+## 细节
+
+- 修复 Prompt 模板缺失时的报错信息无法正确渲染的问题（t() 的 locale 参数与模板变量冲突）。
+- 补全三个鉴权审核 Prompt 模板（auth_input_check / auth_planner_check / auth_replyer_check）在中英日三语下的 display_name 等元信息。
+- 修复 29 个因重构未同步而过期的测试（启动绑定、热重载、消息组件、图片管理、i18n、Prompt、WebUI 路由、浏览器实验配置），并消除测试对宿主机系统 locale 的隐式依赖与跨文件 locale 污染。
+- Dashboard 测试在宿主机导出 NODE_ENV=production 时全量失败（React.act 缺失），vitest 配置已强制测试运行在 test 环境。
+
 # [1.1.4] - 2026-8-2
 
 ## 模型

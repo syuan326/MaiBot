@@ -52,6 +52,7 @@
       "logViewer": "Log Viewer",
       "reasoningProcess": "Reasoning Process",
       "maisakaMonitor": "MaiSaka Chat Monitor",
+      "maisakaAuthMonitor": "MaiSaka Auth Monitor",
       "chatManagement": "Chat Management",
       "localChat": "Local Chat",
       "settings": "WebUI Settings"

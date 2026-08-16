@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.common.i18n import set_locale
+from src.common.i18n import get_locale, set_locale
 from src.common.prompt_i18n import (
     PROMPTS_ROOT,
     clear_prompt_cache,
@@ -17,11 +17,13 @@ from src.prompt.prompt_manager import PromptManager
 
 @pytest.fixture(autouse=True)
 def clear_prompt_i18n_cache() -> None:
+    # 钉住 zh-CN 保证确定性，并在结束后恢复原 locale，避免污染其他测试文件
+    previous_locale = get_locale()
     set_locale("zh-CN")
     clear_prompt_cache()
     yield
     clear_prompt_cache()
-    set_locale("zh-CN")
+    set_locale(previous_locale)
 
 
 def write_prompt(prompt_dir: Path, locale: str | None, name: str, content: str) -> None:
@@ -40,7 +42,9 @@ def test_load_prompt_prefers_requested_locale(tmp_path: Path) -> None:
     assert rendered == "Hello, Mai"
 
 
-def test_load_prompt_falls_back_to_default_locale(tmp_path: Path) -> None:
+def test_load_prompt_falls_back_to_default_locale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # prompt_i18n 的兜底 locale 是模块级常量（取自宿主机系统 locale），钉住 zh-CN 保证确定性
+    monkeypatch.setattr("src.common.prompt_i18n.DEFAULT_LOCALE", "zh-CN")
     prompts_root = tmp_path / "prompts"
     write_prompt(prompts_root, "zh-CN", "replyer", "你好，{user_name}")
 
@@ -57,7 +61,11 @@ def test_load_prompt_does_not_fall_back_to_legacy_root(tmp_path: Path) -> None:
         load_prompt("replyer", locale="en-US", prompts_root=prompts_root, user_name="Mai")
 
 
-def test_load_prompt_with_category_falls_back_to_default_locale_root(tmp_path: Path) -> None:
+def test_load_prompt_with_category_falls_back_to_default_locale_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # prompt_i18n 的兜底 locale 是模块级常量（取自宿主机系统 locale），钉住 zh-CN 保证确定性
+    monkeypatch.setattr("src.common.prompt_i18n.DEFAULT_LOCALE", "zh-CN")
     prompts_root = tmp_path / "prompts"
     write_prompt(prompts_root, "zh-CN", "replyer", "你好，{user_name}")
 

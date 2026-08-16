@@ -5,6 +5,11 @@ import path from 'path'
 
 import { dashboardVersionDefine } from './app-version'
 
+// 测试必须跑在开发版 React 上（React.act 只存在于开发构建）。
+// 宿主机若导出了 NODE_ENV=production，react-dom 会解析到生产构建，
+// 全部组件测试都会以 "React.act is not a function" 失败，这里强制纠正。
+process.env.NODE_ENV = 'test'
+
 export default defineConfig({
   plugins: [react()],
   define: dashboardVersionDefine,

@@ -605,6 +605,7 @@ async def emit_auth_result(
     rejected_text: str = "",
     identity_check: Optional[Dict[str, Any]] = None,
     cycle_id: Optional[int] = None,
+    error: str = "",
 ) -> None:
     """广播鉴权结果事件（通过、驳回、异常放行都会广播，供麦麦观察展示鉴权卡片）。
 
@@ -621,6 +622,7 @@ async def emit_auth_result(
         rejected_text: 被驳回内容的截断预览。
         identity_check: 固定身份 UID 核查的结构化结果；未配置规则时为 None。
         cycle_id: 关联的思考循环编号；replyer 阶段无法获取时为空。
+        error: 审核异常的具体原因；无异常时为空。
     """
 
     await _broadcast("auth.result", {
@@ -636,6 +638,7 @@ async def emit_auth_result(
         "issues": _normalize_payload_value(list(issues or [])),
         "rejected_text": rejected_text,
         "identity_check": _normalize_payload_value(identity_check) if identity_check else None,
+        "error": error,
         "timestamp": time.time(),
     })
 

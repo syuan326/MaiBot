@@ -441,6 +441,14 @@ class ModelTaskConfig(ConfigBase):
     )
     """执行文本概括，整理等小任务，是麦麦必须的模型。可以选择速度快的小尺寸模型"""
 
+    auth: TaskConfig = Field(
+        default_factory=TaskConfig,
+        json_schema_extra={
+            "x-widget": "custom",
+        },
+    )
+    """鉴权审核模型配置，用于 Planner/Replyer 输出的身份核对与输入注入确认；留空时用 utils 模型"""
+
     learner: TaskConfig = Field(
         default_factory=TaskConfig,
         json_schema_extra={

@@ -317,7 +317,10 @@ def resolve_prompt_path(
                 if candidate_path.is_file():
                     return candidate_path
 
-    raise FileNotFoundError(t("prompt.template_not_found", locale=requested_locale, name=normalized_name))
+    # 注意：t() 的 locale 参数用于选择目标语言，模板变量须改用 prompt_locale 传递
+    raise FileNotFoundError(
+        t("prompt.template_not_found", locale=requested_locale, name=normalized_name, prompt_locale=requested_locale)
+    )
 
 
 @lru_cache(maxsize=None)

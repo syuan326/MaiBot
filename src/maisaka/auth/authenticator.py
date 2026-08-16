@@ -400,6 +400,15 @@ def _build_break_guard_check(locale: str = "zh_CN") -> str:
     )
 
 
+def _truncate_audit_error(error_text: str, limit: int = 300) -> str:
+    """截断过长的审核异常信息。"""
+
+    normalized = " ".join(str(error_text or "").split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
+
+
 def parse_auth_decision(raw_response: str) -> AuthDecision:
     """解析鉴权审核 LLM 的 JSON 响应。
 
@@ -533,6 +542,7 @@ class Authenticator:
             return AuthDecision(
                 passed=True,
                 audit_error=True,
+                audit_error_text=_truncate_audit_error(str(exc)),
                 identity_check=identity_check.payload,
                 identity_check_text=identity_check.block_text,
             )
@@ -629,6 +639,7 @@ class Authenticator:
             return AuthDecision(
                 passed=True,
                 audit_error=True,
+                audit_error_text=_truncate_audit_error(str(exc)),
                 identity_check=identity_check.payload,
                 identity_check_text=identity_check.block_text,
             )

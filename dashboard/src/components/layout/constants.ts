@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Puzzle,
   Settings,
+  ShieldCheck,
   Smile,
   Store,
   Wifi,
@@ -23,6 +24,7 @@ import type { MenuIcon, MenuSection } from './types'
 
 const HomeIcon = createStreamlineIcon('allergens-fish-remix', Home)
 const MonitorIcon = createStreamlineIcon('desktop-chat-remix', Activity)
+const AuthMonitorIcon: MenuIcon = (props) => createElement(ShieldCheck, props)
 const ChatManagementIcon = createStreamlineIcon('chat-two-bubbles-oval-remix', MessageSquare)
 const BotConfigIcon = createStreamlineIcon('page-setting-remix', Settings)
 const ModelIcon = createStreamlineIcon('module-remix', Box)
@@ -49,6 +51,7 @@ export const menuSections: MenuSection[] = [
         searchDescription: 'search.items.homeDesc',
       },
       { icon: MonitorIcon, label: 'sidebar.menu.maisakaMonitor', path: '/planner-monitor' },
+      { icon: AuthMonitorIcon, label: 'sidebar.menu.maisakaAuthMonitor', path: '/auth-monitor' },
       { icon: ChatManagementIcon, label: 'sidebar.menu.chatManagement', path: '/chat-management' },
     ],
   },

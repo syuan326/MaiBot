@@ -708,6 +708,23 @@ describe('会话选择、清空与持久化', () => {
     expect(fakeStores.meta.clear).toHaveBeenCalledTimes(1)
   })
 
+  it('clearTimeline 重置事件游标，确保刷新后从零回放历史', async () => {
+    const hookModule = await importHookModule()
+    const view = await mountMonitor(hookModule)
+
+    // 模拟已有游标：事件入账后回放游标推进
+    emitMonitorEvent('message.ingested', makeMessageData({ event_id: 911 }))
+    await waitFor(() => expect(clientMocks.updateReplayCursor).toHaveBeenCalled())
+
+    const lastEventIdKey = 'maisaka-monitor-last-event-id'
+    expect(window.localStorage.getItem(lastEventIdKey)).toBeTruthy()
+
+    act(() => view.result.current.clearTimeline())
+
+    // 本地存储游标被清除，刷新后新模块实例会从 since=0 全量回放
+    expect(window.localStorage.getItem(lastEventIdKey)).toBeNull()
+  })
+
   it('事件入账后经防抖把条目、会话与元数据写入 IndexedDB', async () => {
     const hookModule = await importHookModule()
     const view = await mountMonitor(hookModule)
