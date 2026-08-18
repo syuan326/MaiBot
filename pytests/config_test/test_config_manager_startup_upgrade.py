@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Any
 
 from src.config import config as config_module
@@ -11,6 +12,9 @@ def test_initialize_upgrades_bot_and_model_config_without_exit(monkeypatch):
 
     def fake_load_config_from_file(config_class, config_path, new_ver, override_repr=False):
         loaded_config_classes.append(config_class)
+        if config_class is Config:
+            # initialize() 会把主配置传给 apply_network_proxy_env，需要 network 节
+            return SimpleNamespace(network=SimpleNamespace(http_proxy="", no_proxy=[])), True
         return object(), True
 
     monkeypatch.setattr(config_module, "load_config_from_file", fake_load_config_from_file)

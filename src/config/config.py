@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import inspect
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence, TypeVar, cast
@@ -40,6 +41,7 @@ from .official_configs import (
     MaimMessageConfig,
     MCPConfig,
     MessageReceiveConfig,
+    NetworkConfig,
     PersonalityConfig,
     PluginConfig,
     PluginRuntimeConfig,
@@ -67,8 +69,8 @@ MODEL_CONFIG_PATH: Path = (CONFIG_DIR / "model_config.toml").resolve().absolute(
 LEGACY_ENV_PATH: Path = (PROJECT_ROOT / ".env").resolve().absolute()
 A_MEMORIX_LEGACY_CONFIG_PATH: Path = (CONFIG_DIR / "a_memorix.toml").resolve().absolute()
 MMC_VERSION: str = read_project_version(PROJECT_ROOT)
-CONFIG_VERSION: str = "8.19.0"
-MODEL_CONFIG_VERSION: str = "1.17.6"
+CONFIG_VERSION: str = "8.19.1"
+MODEL_CONFIG_VERSION: str = "1.17.7"
 
 logger = get_logger("config")
 
@@ -144,6 +146,9 @@ class Config(ConfigBase):
 
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     """数据库配置类"""
+
+    network: NetworkConfig = Field(default_factory=NetworkConfig)
+    """网络配置类"""
 
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     """MCP 配置类"""
@@ -240,6 +245,39 @@ def _normalize_loaded_bot_config_dict(config_data: dict[str, Any]) -> dict[str, 
     return normalized
 
 
+_PROXY_ENV_KEYS = ("http_proxy", "https_proxy", "no_proxy")
+"""网络代理配置管理的进程环境变量（小写形式，供 httpx trust_env 读取）。"""
+
+_network_proxy_managed = False
+"""上次应用的代理环境变量是否由本功能写入；用于清空时不误删外部（如 systemd）注入的变量。"""
+
+
+def apply_network_proxy_env(config: Config) -> None:
+    """把 network 配置节的代理设置应用到进程环境变量。
+
+    模型客户端（httpx trust_env=True）在构造时读取 http_proxy/https_proxy/no_proxy，
+    因此本函数需要在客户端创建前调用；热重载后客户端缓存会被清空，新客户端自然生效。
+    配置为空时仅清理本功能写入过的变量，外部注入的代理环境变量不受影响。
+    """
+
+    global _network_proxy_managed
+
+    proxy = config.network.http_proxy.strip()
+    if proxy:
+        os.environ["http_proxy"] = proxy
+        os.environ["https_proxy"] = proxy
+        os.environ["no_proxy"] = ",".join(item.strip() for item in config.network.no_proxy if item.strip())
+        _network_proxy_managed = True
+        logger.info(f"已应用网络代理: {proxy}")
+        return
+
+    if _network_proxy_managed:
+        for key in _PROXY_ENV_KEYS:
+            os.environ.pop(key, None)
+        _network_proxy_managed = False
+        logger.info("网络代理配置已清空，已移除本功能写入的代理环境变量")
+
+
 class ConfigManager:
     """总配置管理类"""
 
@@ -259,6 +297,8 @@ class ConfigManager:
         self._hot_reload_timeout_s: float = 20.0
         self._last_hot_reload_monotonic: float = 0.0
         self.reload_revision: int = 0
+        # 热重载后重新应用网络代理环境变量（回调执行时 global_config 已更新）
+        self.register_reload_callback(lambda: apply_network_proxy_env(self.get_global_config()))
 
     def initialize(self):
         logger.info(t("config.current_version", version=MMC_VERSION))
@@ -272,6 +312,8 @@ class ConfigManager:
         )
         if global_updated or model_updated:
             logger.info("配置已自动升级，将继续使用更新后的配置启动")
+        # 在模型客户端创建前应用代理环境变量
+        apply_network_proxy_env(self.global_config)
         self._warn_if_vlm_not_configured(self.model_config)
         logger.info(t("config.loaded"))
 

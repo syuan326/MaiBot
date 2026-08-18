@@ -434,6 +434,37 @@ export function ProviderForm({
               )}
             </div>
 
+            <div className="grid gap-2" data-tour="provider-proxy-input">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="proxy">代理地址（可选）</Label>
+                <HelpTooltip
+                  content={
+                    <div className="space-y-2">
+                      <p className="font-medium">该厂商请求使用的代理</p>
+                      <p>支持 http://、https://、socks5:// 格式，例如 http://127.0.0.1:7890。</p>
+                      <ul className="list-disc list-inside space-y-1 text-xs">
+                        <li>仅对当前厂商生效，适合境外厂商（如 Gemini、OpenAI）单独走代理</li>
+                        <li>留空则不单独设置，回退到「网络」配置节的全局代理</li>
+                        <li>保存模型配置后自动生效，无需重启</li>
+                      </ul>
+                    </div>
+                  }
+                  side="right"
+                  maxWidth="400px"
+                />
+              </div>
+              <Input
+                id="proxy"
+                value={localProvider?.proxy || ''}
+                onChange={(e) => {
+                  setLocalProvider((prev) =>
+                    prev ? { ...prev, proxy: e.target.value } : null
+                  )
+                }}
+                placeholder="http://127.0.0.1:7890"
+              />
+            </div>
+
             <div className="grid gap-2" data-tour="provider-apikey-input">
               <div className="flex items-center gap-1.5">
                 <Label htmlFor="api_key" className={formErrors.api_key ? 'text-destructive' : ''}>API Key *</Label>

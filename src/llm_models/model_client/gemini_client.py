@@ -654,6 +654,13 @@ def _build_http_options(api_provider: APIProvider) -> HttpOptions:
         else:
             http_options_payload["base_url"] = f"{normalized_base_url}/"
 
+    # 厂商单独配置代理时透传给底层 httpx 客户端（同步/异步都覆盖）；
+    # 否则由 trust_env 读取「网络」配置节写入的全局代理环境变量。
+    proxy = api_provider.proxy.strip()
+    if proxy:
+        http_options_payload["client_args"] = {"proxy": proxy}
+        http_options_payload["async_client_args"] = {"proxy": proxy}
+
     return HttpOptions(**http_options_payload)
 
 
@@ -712,7 +719,16 @@ class GeminiClient(AdapterClient[AsyncIterator[GenerateContentResponse], Generat
         )
 
     @staticmethod
-    def clamp_thinking_budget(extra_params: Dict[str, Any] | None, model_id: str) -> int:
+    def _model_supports_thinking_budget(model_id: str) -> bool:
+        """判断模型是否支持思考预算参数。
+
+        Gemini 2.5 系列支持；Gemma 等开放模型不支持，发送 thinking_budget 会被 API 以 400 拒绝。
+        """
+
+        return model_id in THINKING_BUDGET_LIMITS or model_id.startswith("gemini-")
+
+    @staticmethod
+    def clamp_thinking_budget(extra_params: Dict[str, Any] | None, model_id: str) -> Optional[int]:
         """将思考预算裁剪到模型允许的范围内。
 
         Args:
@@ -720,8 +736,12 @@ class GeminiClient(AdapterClient[AsyncIterator[GenerateContentResponse], Generat
             model_id: 当前模型标识。
 
         Returns:
-            int: 裁剪后的思考预算值。
+            Optional[int]: 裁剪后的思考预算值；模型不支持思考预算时返回 ``None``（省略该参数）。
         """
+        if not GeminiClient._model_supports_thinking_budget(model_id):
+            # 不支持思考预算的模型（如 gemma-*）必须省略该参数，否则 API 报参数错误
+            return None
+
         thinking_budget = THINKING_BUDGET_AUTO
         if extra_params and "thinking_budget" in extra_params:
             try:

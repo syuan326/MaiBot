@@ -245,6 +245,7 @@ async def _fetch_models_from_provider(
     auth_query_name: str = "api_key",
     default_headers: Optional[Dict[str, str]] = None,
     default_query: Optional[Dict[str, str]] = None,
+    proxy: str = "",
 ) -> List[Dict]:
     """从提供商 API 获取模型列表。
 
@@ -301,7 +302,7 @@ async def _fetch_models_from_provider(
             headers["Authorization"] = f"Bearer {client_config.api_key}"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy or None) as client:
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
@@ -587,6 +588,7 @@ async def get_provider_models(
         auth_query_name=provider_config.get("auth_query_name", "api_key"),
         default_headers=provider_config.get("default_headers", {}),
         default_query=provider_config.get("default_query", {}),
+        proxy=str(provider_config.get("proxy", "") or ""),
     )
 
     return {
@@ -608,6 +610,7 @@ async def get_models_by_url(
     auth_header_name: str = Query("Authorization", description="Header 鉴权名称"),
     auth_header_prefix: str = Query("Bearer", description="Header 鉴权前缀"),
     auth_query_name: str = Query("api_key", description="Query 鉴权参数名"),
+    proxy: str = Query("", description="提供商配置的代理地址，留空则回退到进程环境变量代理"),
 ):
     """通过 URL 直接获取模型列表。"""
     models = await _fetch_models_from_provider(
@@ -620,6 +623,7 @@ async def get_models_by_url(
         auth_header_name=auth_header_name,
         auth_header_prefix=auth_header_prefix,
         auth_query_name=auth_query_name,
+        proxy=proxy,
     )
 
     return {
@@ -634,6 +638,7 @@ async def test_provider_connection(
     base_url: str = Query(..., description="提供商的基础 URL"),
     api_key: Optional[str] = Query(None, description="API Key（可选，用于验证 Key 有效性）"),
     client_type: str = Query("openai", description="客户端类型 (openai | openai_responses | gemini)"),
+    proxy: str = Query("", description="提供商配置的代理地址，留空则回退到进程环境变量代理"),
 ):
     """
     测试提供商连接状态
@@ -670,7 +675,7 @@ async def test_provider_connection(
     # 第一步：测试网络连通性
     try:
         start_time = time.time()
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, proxy=proxy or None) as client:
             # 尝试 GET 请求 base_url（不需要 API Key）
             response = await client.get(base_url)
             latency = (time.time() - start_time) * 1000
@@ -696,7 +701,7 @@ async def test_provider_connection(
     if api_key:
         try:
             start_time = time.time()
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, proxy=proxy or None) as client:
                 headers = {"Content-Type": "application/json"}
                 params = {}
 
@@ -757,9 +762,10 @@ async def test_provider_connection_by_name(
     if not base_url:
         raise HTTPException(status_code=400, detail="提供商配置缺少 base_url")
 
-    # 调用测试接口
+    # 调用测试接口（携带厂商配置的代理，避免境外端点测试超时）
     return await test_provider_connection(
         base_url=base_url,
         api_key=api_key if api_key else None,
         client_type=client_type,
+        proxy=str(provider.get("proxy", "") or ""),
     )

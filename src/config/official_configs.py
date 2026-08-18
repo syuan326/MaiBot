@@ -5800,6 +5800,38 @@ class WebUIConfig(ConfigBase):
     """知识图谱里是否加载段落全文；更完整但更占内存。"""
 
 
+class NetworkConfig(ConfigBase):
+    """网络配置类"""
+
+    __ui_label__ = "网络"
+
+    http_proxy: str = Field(
+        default="",
+        json_schema_extra={
+            "label": {
+                "zh_CN": "代理地址",
+                "en_US": "Proxy address",
+                "ja_JP": "プロキシアドレス",
+            },
+            "x-widget": "input",
+        },
+    )
+    """模型 API 等出站请求使用的代理；支持 http://、https://、socks5:// 格式，如 http://127.0.0.1:7890；留空不使用代理。"""
+
+    no_proxy: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "::1"],
+        json_schema_extra={
+            "label": {
+                "zh_CN": "直连地址列表",
+                "en_US": "Direct connection list",
+                "ja_JP": "プロキシ不使用リスト",
+            },
+            "x-widget": "custom",
+        },
+    )
+    """不经过代理、直接连接的地址；国内模型厂商域名建议加入此列表，避免绕路。"""
+
+
 class DatabaseConfig(ConfigBase):
     """数据库配置类"""
 

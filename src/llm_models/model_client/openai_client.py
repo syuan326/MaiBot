@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from json_repair import repair_json
-from openai import APIConnectionError, APIStatusError, AsyncOpenAI, AsyncStream
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI, AsyncStream, DefaultAsyncHttpxClient
 from openai._types import FileTypes, Omit, omit
 from openai.types.chat import (
     ChatCompletion,
@@ -1282,6 +1282,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
         self.reasoning_parse_mode = _normalize_reasoning_parse_mode(api_provider.reasoning_parse_mode)
         self.reasoning_key = _build_reasoning_key(api_provider)
         self.tool_argument_parse_mode = _normalize_tool_argument_parse_mode(api_provider.tool_argument_parse_mode)
+        # 厂商单独配置代理时注入带代理的 HTTP 客户端（保留 SDK 默认超时/连接池/重定向行为）；
+        # 否则使用默认客户端，由 trust_env 读取「网络」配置节写入的全局代理环境变量。
+        http_client = DefaultAsyncHttpxClient(proxy=api_provider.proxy.strip()) if api_provider.proxy.strip() else None
         self.client = AsyncOpenAI(
             api_key=client_config.api_key,
             organization=api_provider.organization,
@@ -1291,6 +1294,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             max_retries=api_provider.max_retry,
             default_headers=client_config.default_headers or None,
             default_query=client_config.default_query or None,
+            http_client=http_client,
         )
 
     def _build_default_stream_response_handler(

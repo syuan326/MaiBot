@@ -11,6 +11,7 @@ export interface APIProvider {
   max_retry: number | null
   timeout: number | null
   retry_interval: number | null
+  proxy?: string
 }
 
 /**

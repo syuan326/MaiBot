@@ -52,6 +52,14 @@ class APIProvider(ConfigBase):
     )
     """API服务商的BaseURL"""
 
+    proxy: str = Field(
+        default="",
+        json_schema_extra={
+            "x-widget": "input",
+        },
+    )
+    """该厂商请求使用的代理地址；支持 http://、https://、socks5://，留空表示不单独设置（回退到「网络」配置节的全局代理）。"""
+
     api_key: str = Field(
         default_factory=str,
         repr=False,
