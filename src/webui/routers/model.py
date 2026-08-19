@@ -159,7 +159,9 @@ async def test_model_capability(request: ModelTestRequest):
         orchestrator = _SingleModelTestOrchestrator(model_name=model_name)
         result = await orchestrator.generate_response_with_message_async(
             message_factory=_build_model_test_message_factory(visual_enabled),
-            temperature=0.0,
+            # 不显式指定温度，让调度器按「模型级温度 → 任务默认温度」解析，
+            # 使测试结果与真实调用一致（部分模型如 Kimi K2.6 只接受 temperature=1）
+            temperature=None,
             max_tokens=512,
             model_name=model_name,
             tools=_build_model_test_tools(),

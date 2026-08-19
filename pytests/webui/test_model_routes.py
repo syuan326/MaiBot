@@ -195,6 +195,54 @@ client_type = "gemini"
         "base_url": "https://generativelanguage.googleapis.com/v1beta",
         "api_key": "valid-gemini-key",
         "client_type": "gemini",
+        "proxy": "",
+    }
+
+
+@pytest.mark.asyncio
+async def test_test_provider_connection_by_name_forwards_provider_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """按提供商名称测试连接时，应透传配置中的代理地址。"""
+    model_routes = load_model_routes(monkeypatch)
+    config_path = tmp_path / "model_config.toml"
+    config_path.write_text(
+        """
+[[api_providers]]
+name = "Gemini"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key = "valid-gemini-key"
+client_type = "gemini"
+proxy = "http://127.0.0.1:7890"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(model_routes, "CONFIG_DIR", str(tmp_path))
+
+    captured_kwargs: dict[str, Any] = {}
+
+    async def fake_test_provider_connection(**kwargs: Any) -> dict[str, Any]:
+        captured_kwargs.update(kwargs)
+        return {
+            "network_ok": True,
+            "api_key_valid": True,
+            "latency_ms": 12.34,
+            "error": None,
+            "http_status": 200,
+        }
+
+    monkeypatch.setattr(model_routes, "test_provider_connection", fake_test_provider_connection)
+
+    result = await model_routes.test_provider_connection_by_name(provider_name="Gemini")
+
+    assert result["network_ok"] is True
+    assert captured_kwargs == {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "api_key": "valid-gemini-key",
+        "client_type": "gemini",
+        "proxy": "http://127.0.0.1:7890",
     }
 
 

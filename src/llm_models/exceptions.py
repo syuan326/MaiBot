@@ -9,7 +9,7 @@ error_code_mapping = {
     403: "模型拒绝访问，可能需要实名或余额不足",
     404: "Not Found",
     413: "请求体过大，请尝试压缩图片或减少输入内容",
-    429: "请求过于频繁，请稍后再试",
+    429: "请求过于频繁或超出使用额度，请稍后再试",
     500: "服务器内部故障",
     503: "服务器负载过高",
 }
@@ -47,7 +47,12 @@ class RespNotOkException(Exception):
 
     def __str__(self):
         if self.status_code in error_code_mapping:
-            return error_code_mapping[self.status_code]
+            mapped_text = error_code_mapping[self.status_code]
+            # 上游常返回具体原因（如余额不足/额度超限），一并透出便于定位；
+            # 与映射文案相同时不重复拼接
+            if self.message and self.message.strip() and self.message.strip() != mapped_text:
+                return f"{mapped_text}（{self.message.strip()[:150]}）"
+            return mapped_text
         elif self.message:
             return self.message
         else:
