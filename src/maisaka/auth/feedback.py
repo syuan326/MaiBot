@@ -9,8 +9,14 @@ from typing import Sequence
 
 import json
 
+from src.llm_models.payload_content.context_item import ContextItem, FunctionCallItem
 from src.llm_models.payload_content.tool_option import ToolCall
-from src.maisaka.context.messages import AssistantMessage, ReferenceMessage, ReferenceMessageType
+from src.maisaka.context.messages import (
+    ModelOutputContextMessage,
+    ReferenceMessage,
+    ReferenceMessageType,
+    build_model_output_context_messages,
+)
 
 from .decision import AuthDecision
 
@@ -27,19 +33,19 @@ def _truncate_preview(text: str, limit: int) -> str:
     return f"{normalized[:limit]}..."
 
 
-def build_rejected_assistant_message(raw_message: AssistantMessage) -> AssistantMessage:
-    """构造工具调用被清空的被拒 assistant 消息。
+def build_rejected_output_messages(
+    output_items: Sequence[ContextItem],
+    *,
+    source_kind: str = "assistant",
+) -> list[ModelOutputContextMessage]:
+    """构造工具调用被清空的被拒模型输出历史条目。
 
-    被拒绝的 Planner 输出不会执行任何工具调用；写入历史前清空 tool_calls，
+    被拒绝的 Planner 输出不会执行任何工具调用；写入历史前剔除 FunctionCallItem，
     避免历史规范化把这条"没有工具结果配对的调用"整条删除。
     """
 
-    return AssistantMessage(
-        content=raw_message.content,
-        timestamp=raw_message.timestamp,
-        tool_calls=[],
-        source_kind=raw_message.source_kind,
-    )
+    filtered_items = [item for item in output_items if not isinstance(item, FunctionCallItem)]
+    return build_model_output_context_messages(filtered_items, source_kind=source_kind)
 
 
 def build_planner_auth_feedback_message(
